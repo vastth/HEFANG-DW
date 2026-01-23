@@ -1,12 +1,13 @@
 import pymysql
+import os
 
 # 连接MySQL
 conn = pymysql.connect(
-    host='localhost',
-    port=3306,
-    user='dba',
-    password='HF970312',
-    database='hefang_dw'
+    host=os.getenv('MYSQL_HOST', 'localhost'),
+    port=int(os.getenv('MYSQL_PORT', 3306)),
+    user=os.getenv('MYSQL_USER', 'dba'),
+    password=os.getenv('MYSQL_PASSWORD'),
+    database=os.getenv('MYSQL_DATABASE', 'hefang_dw')
 )
 
 cursor = conn.cursor()
