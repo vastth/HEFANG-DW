@@ -50,7 +50,7 @@
 | 层级 | 名称 | 说明 | 示例表 |
 |------|------|------|--------|
 | ODS | 原始数据层 | 1:1复制源表（保留） | ods_m_retail, ods_fa_storage |
-| DIM | 维度层 | 维度表 | dim_product, dim_store, dim_date |
+| DIM | 维度层 | 维度表 | dim_product, dim_store, dim_sku, dim_date |
 | DWD | 明细事实层 | 清洗后的明细（保留） | dwd_retail_detail |
 | DWS | 汇总事实层 | 按主题汇总 | dws_sales_daily, dws_inventory_daily |
 | ADS | 应用层 | 面向应用 | ads_daily_report, ads_inventory_health |
@@ -78,6 +78,8 @@
                         │ • 退货额      │
                         └───────────────┘
 ```
+
+> 注：SKU维度来自 dim_sku（sku_id），用于SKU粒度分析。
 
 ---
 
@@ -127,6 +129,20 @@ CREATE TABLE dim_store (
 );
 ```
 
+**dim_sku（SKU维度）**
+```sql
+CREATE TABLE dim_sku (
+    sku_id            BIGINT PRIMARY KEY,
+    product_id        BIGINT,
+    sku_barcode       VARCHAR(80),
+    sku_color         VARCHAR(60),
+    sku_size          VARCHAR(60),
+    is_active         CHAR(1),
+    created_at        DATETIME,
+    updated_at        DATETIME
+);
+```
+
 **dim_date（日期维度）**
 ```sql
 CREATE TABLE dim_date (
@@ -159,6 +175,7 @@ CREATE TABLE dws_sales_daily (
     date_id         INT,
     store_id        BIGINT,
     product_id      BIGINT,
+    m_productalias_id BIGINT,
     sales_qty       INT,
     sales_amount    DECIMAL(14,2),
     sales_amount_list DECIMAL(14,2),
@@ -185,7 +202,10 @@ CREATE TABLE dws_inventory_daily (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY,
     date_id         INT,
     store_id        BIGINT,
+    store_code      VARCHAR(32),
+    is_cloud_store  CHAR(1),
     product_id      BIGINT,
+    m_productalias_id BIGINT,
     qty             INT,
     qty_valid       INT,
     qty_occupy      INT,
@@ -212,6 +232,7 @@ CREATE TABLE dws_inventory_daily (
 库存数据 ← dws_inventory_daily (当天)
 销售数据 ← dws_sales_daily (近30天)
 商品信息 ← dim_product
+SKU信息 ← dim_sku
 仓库信息 ← dim_store
 
 -- 计算内容
@@ -230,9 +251,10 @@ CREATE TABLE dws_inventory_daily (
 | 目标表 | 源表 | 策略 | 说明 |
 |--------|------|------|------|
 | dim_product | M_PRODUCT + M_DIM | 全量覆盖 | 商品信息可能改 |
+| dim_sku | M_PRODUCT_ALIAS + M_ATTRIBUTESETINSTANCE | 全量覆盖 | SKU信息可能改 |
 | dim_store | C_STORE + C_AREA | 全量覆盖 | 门店可能新增 |
-| dws_sales_daily | M_RETAIL + M_RETAILITEM | 增量（按日期） | 默认同步昨天，可按 days_back 回溯 |
-| dws_inventory_daily | FA_STORAGE | 全量快照 | 每日记录当天库存 |
+| dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天 |
+| dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存 |
 | ads_inventory_health | MySQL内计算 | 重新计算 | 基于dws层 |
 
 ---
@@ -242,12 +264,12 @@ CREATE TABLE dws_inventory_daily (
 ```
 03:00  ETL开始
 03:05  同步dim_product（约3分钟）
-03:08  同步dim_store（约1分钟）
-03:10  同步dws_sales_daily-昨天（约5分钟）
-03:15  同步dws_inventory_daily（约10分钟）
-03:25  计算ads_inventory_health（约5分钟）
-03:30  计算ads_daily_report（约3分钟）
-03:35  ETL结束
+03:08  同步dim_sku（约1分钟）
+03:10  同步dim_store（约1分钟）
+03:12  同步dws_sales_daily（智能判断）（约5分钟）
+03:17  同步dws_inventory_daily（约10分钟）
+03:27  计算ads_inventory_health（约5分钟）
+03:32  ETL结束
 06:00  Tableau数据源刷新
 ```
 
@@ -257,8 +279,13 @@ CREATE TABLE dws_inventory_daily (
 
 **销售数据增量：**
 ```python
-# 默认同步昨天数据（可通过 days_back 回溯）
-end_dt = datetime.now() - timedelta(days=1)
+# 智能判断：凌晨查昨天，白天查今天（可通过 days_back 回溯）
+current_time = datetime.now()
+if include_today:
+    end_dt = current_time - timedelta(days=1) if current_time.hour < 6 else current_time
+else:
+    end_dt = current_time - timedelta(days=1)
+
 start_dt = end_dt - timedelta(days=days_back-1)
 start_date = int(start_dt.strftime('%Y%m%d'))
 end_date = int(end_dt.strftime('%Y%m%d'))
@@ -266,6 +293,10 @@ end_date = int(end_dt.strftime('%Y%m%d'))
 # 先删后插
 mysql.execute(f"DELETE FROM dws_sales_daily WHERE date_id >= {start_date} AND date_id <= {end_date}")
 df = oracle.query(sales_sql.format(start_date=start_date, end_date=end_date))
+# 关键过滤：
+# - 只取SKU（M_PRODUCTALIAS_ID IS NOT NULL）
+# - 只取电商/云仓门店（s.CODE LIKE 'DS%' OR s.IS_ALLO2OSTORAGE='Y'）
+# - 只取主销品类（M_DIM4_ID IN 134,142,139,138,141,143,133,136,140,137,144,145）
 mysql.to_sql(df, 'dws_sales_daily', if_exists='append')
 ```
 
@@ -292,13 +323,21 @@ mysql.execute(f"DELETE FROM dws_inventory_daily WHERE date_id = {today}")
 # 抽取当前库存
 df = oracle.query("""
     SELECT 
-        C_STORE_ID AS store_id,
-        M_PRODUCT_ID AS product_id,
-        QTY AS qty,
-        QTYVALID AS qty_valid,
-        NVL(QTYPURCHASEREM, 0) AS qtypurchaserem
-    FROM FA_STORAGE 
-    WHERE ISACTIVE = 'Y'
+        fs.C_STORE_ID AS store_id,
+        s.CODE AS store_code,
+        NVL(s.IS_ALLO2OSTORAGE, 'N') AS is_cloud_store,
+        fs.M_PRODUCT_ID AS product_id,
+        fs.M_PRODUCTALIAS_ID AS m_productalias_id,
+        fs.QTY AS qty,
+        fs.QTYVALID AS qty_valid,
+        NVL(fs.QTYPURCHASEREM, 0) AS qtypurchaserem
+    FROM FA_STORAGE fs
+        LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
+        LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
+    WHERE fs.ISACTIVE = 'Y'
+      AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+      AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+      AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
 """)
 df['date_id'] = int(today)
 df['qty_occupy'] = 0
@@ -323,6 +362,7 @@ ads_inventory_health不从Oracle抽，而是在MySQL内计算：
 库存数据 ← dws_inventory_daily (当天)
 销售数据 ← dws_sales_daily (近30天)
 商品信息 ← dim_product
+SKU信息 ← dim_sku
 仓库信息 ← dim_store
 
 -- 计算步骤
@@ -477,4 +517,4 @@ ETL_CONFIG = {
 
 ---
 
-*文档版本: 2.0 | 更新日期: 2026-01-20 | 合并文档5、17*
+*文档版本: 2.1 | 更新日期: 2026-01-30 | 合并文档5、17*

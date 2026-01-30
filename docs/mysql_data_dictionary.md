@@ -33,39 +33,42 @@
 | 1 | id | bigint | NO |  |  |
 | 2 | snapshot_date | date | NO |  | 快照日期 |
 | 3 | product_id | bigint | NO |  | 商品ID |
-| 4 | product_code | varchar(80) | YES |  | 商品编码 |
-| 5 | product_name | varchar(200) | YES |  | 商品名称 |
-| 6 | category_id | int | YES |  | 类别ID |
-| 7 | category_name | varchar(50) | YES |  | 类别 |
-| 8 | property_id | int | YES |  | 性质ID |
-| 9 | property_name | varchar(50) | YES |  | 性质 |
-| 10 | series_id | int | YES |  |  |
-| 11 | series_name | varchar(100) | YES |  |  |
-| 12 | price_list | decimal(12,2) | YES | 0.00 | 吊牌价 |
-| 13 | total_qty | int | YES | 0 | 总库存 |
-| 14 | warehouse_qty | int | YES | 0 | 总仓库存 |
-| 15 | cloud_qty | int | YES | 0 | 云仓库存 |
-| 16 | sales_qty_30d | int | YES | 0 | 近30天销量 |
-| 17 | sales_amt_30d | decimal(14,2) | YES | 0.00 | 近30天销售额 |
-| 18 | return_qty_30d | int | YES | 0 | 近30天退货量 |
-| 19 | sales_qty_7d | int | YES | 0 | 近7天销量 |
-| 20 | daily_avg_sales | decimal(10,2) | YES |  | 日均销量30天 |
-| 21 | daily_avg_7d | decimal(10,2) | YES |  | 日均销量7天 |
-| 22 | sales_velocity | decimal(5,2) | YES |  | 销售加速度 |
-| 23 | sales_trend | varchar(20) | YES |  | 销售趋势 |
-| 24 | turnover_days | decimal(10,1) | YES |  | 周转天数 |
-| 25 | inventory_status | varchar(20) | YES |  | 库存状态 |
-| 26 | status_priority | int | YES |  | 状态优先级 |
-| 27 | sku_grade | char(1) | YES |  | SABC分级 |
-| 28 | sales_rank | int | YES |  | 销售排名 |
-| 29 | sales_ratio | decimal(5,2) | YES |  | 销售占比 |
-| 30 | cumulative_ratio | decimal(5,2) | YES |  | 累计占比 |
-| 31 | suggest_qty | int | YES | 0 | 建议补货数量 |
-| 32 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
-| 33 | etl_time | datetime | YES |  | ETL时间戳 |
-| 34 | purchase_rem_qty | int | YES | 0 | 采购欠数/在途库存 |
-| 35 | daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天日均销量 |
-| 36 | return_amount_30d | decimal(14,2) | YES | 0.00 |  |
+| 4 | sku_id | bigint | YES |  | SKU主键（M_PRODUCT_ALIAS.ID） |
+| 5 | sku_barcode | varchar(80) | YES |  | 条码 |
+| 6 | color | varchar(50) | YES |  | SKU颜色 |
+| 7 | size | varchar(50) | YES |  | SKU尺寸 |
+| 8 | product_code | varchar(80) | YES |  | 商品编码 |
+| 9 | product_name | varchar(200) | YES |  | 商品名称 |
+| 10 | category_id | int | YES |  | 类别ID |
+| 11 | category_name | varchar(50) | YES |  | 类别 |
+| 12 | property_id | int | YES |  | 性质ID |
+| 13 | property_name | varchar(50) | YES |  | 性质 |
+| 14 | series_id | int | YES |  |  |
+| 15 | series_name | varchar(100) | YES |  |  |
+| 16 | price_list | decimal(12,2) | YES | 0.00 | 吊牌价 |
+| 17 | total_qty | int | YES | 0 | 总库存 |
+| 18 | warehouse_qty | int | YES | 0 | 总仓库存 |
+| 19 | cloud_qty | int | YES | 0 | 云仓库存 |
+| 20 | sales_qty_30d | int | YES | 0 | 近30天销量 |
+| 21 | sales_amt_30d | decimal(14,2) | YES | 0.00 | 近30天销售额 |
+| 22 | return_qty_30d | int | YES | 0 | 近30天退货量 |
+| 23 | sales_qty_7d | int | YES | 0 | 近7天销量 |
+| 24 | daily_avg_sales | decimal(10,2) | YES |  | 日均销量30天 |
+| 25 | daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天日均销量 |
+| 26 | sales_velocity | decimal(5,2) | YES |  | 销售加速度 |
+| 27 | sales_trend | varchar(20) | YES |  | 销售趋势 |
+| 28 | turnover_days | decimal(10,1) | YES |  | 周转天数 |
+| 29 | inventory_status | varchar(20) | YES |  | 库存状态 |
+| 30 | status_priority | int | YES |  | 状态优先级 |
+| 31 | sku_grade | char(1) | YES |  | SABC分级 |
+| 32 | sales_rank | int | YES |  | 销售排名 |
+| 33 | sales_ratio | decimal(5,2) | YES |  | 销售占比 |
+| 34 | cumulative_ratio | decimal(5,2) | YES |  | 累计占比 |
+| 35 | suggest_qty | int | YES | 0 | 建议补货数量 |
+| 36 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 37 | etl_time | datetime | YES |  | ETL时间戳 |
+| 38 | purchase_rem_qty | int | YES | 0 | 采购欠数/在途库存 |
+| 39 | return_amount_30d | decimal(14,2) | YES | 0.00 |  |
 
 ## ads_sales_summary
 - 描述: 销售汇总应用表
@@ -169,6 +172,20 @@
 | 2 | color | text | YES |  |  |
 | 3 | size | text | YES |  |  |
 
+## dim_sku
+- 描述: SKU维度表
+
+| 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | sku_id | bigint | NO |  | SKU主键 |
+| 2 | sku_barcode | varchar(80) | YES |  | 条码 |
+| 3 | product_id | bigint | YES |  | 货号ID |
+| 4 | sku_color | varchar(50) | YES |  | 颜色 |
+| 5 | sku_size | varchar(50) | YES |  | 尺寸 |
+| 6 | is_active | char(1) | YES | Y | 是否有效 |
+| 7 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 8 | updated_at | datetime | YES | CURRENT_TIMESTAMP |  |
+
 ## dim_store
 - 描述: 店仓维度表
 
@@ -196,13 +213,16 @@
 | 1 | id | bigint | NO |  |  |
 | 2 | date_id | int | NO |  | 日期ID |
 | 3 | store_id | bigint | NO |  | 店仓ID |
-| 4 | product_id | bigint | NO |  | 商品ID |
-| 5 | qty | int | YES | 0 | 库存数量 |
-| 6 | qty_valid | int | YES | 0 | 可用库存 |
-| 7 | qty_occupy | int | YES | 0 | 占用数量 |
-| 8 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
-| 9 | etl_time | datetime | YES |  | ETL时间戳 |
-| 10 | qtypurchaserem | bigint | YES | 0 | 采购欠数/在途 |
+| 4 | store_code | varchar(40) | YES |  | 店仓编码 |
+| 5 | is_cloud_store | char(1) | YES | N | 是否云仓(Y/N) |
+| 6 | product_id | bigint | NO |  | 商品ID |
+| 7 | m_productalias_id | bigint | YES |  | SKU ID（条码） |
+| 8 | qty | int | YES | 0 | 库存数量 |
+| 9 | qty_valid | int | YES | 0 | 可用库存 |
+| 10 | qty_occupy | int | YES | 0 | 占用数量 |
+| 11 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 12 | etl_time | datetime | YES |  | ETL时间戳 |
+| 13 | qtypurchaserem | bigint | YES | 0 | 采购欠数/在途 |
 
 ## dws_sales_daily
 - 描述: 日销售汇总表
@@ -213,19 +233,20 @@
 | 2 | date_id | int | NO |  | 日期ID |
 | 3 | store_id | bigint | NO |  | 店仓ID |
 | 4 | product_id | bigint | NO |  | 商品ID |
-| 5 | sales_qty | int | YES | 0 | 销售数量 |
-| 6 | sales_amount | decimal(14,2) | YES | 0.00 | 销售金额 |
-| 7 | sales_amount_list | decimal(14,2) | YES | 0.00 | 吊牌金额 |
-| 8 | return_qty | int | YES | 0 | 退货数量 |
-| 9 | return_amount | decimal(14,2) | YES | 0.00 | 退货金额 |
-| 10 | net_qty | int | YES | 0 | 净销量 |
-| 11 | net_amount | decimal(14,2) | YES | 0.00 | 净销售额 |
-| 12 | order_count | int | YES | 0 | 订单数 |
-| 13 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
-| 14 | updated_at | datetime | YES | CURRENT_TIMESTAMP |  |
-| 15 | etl_time | datetime | YES |  | ETL时间戳 |
-| 16 | store_code | varchar(32) | YES |  | 源店仓编码（如 DS001） |
-| 17 | is_cloud_store | char(1) | YES | N | 是否云仓(Y/N) |
+| 5 | m_productalias_id | bigint | YES |  | SKU ID（条码） |
+| 6 | sales_qty | int | YES | 0 | 销售数量 |
+| 7 | sales_amount | decimal(14,2) | YES | 0.00 | 销售金额 |
+| 8 | sales_amount_list | decimal(14,2) | YES | 0.00 | 吊牌金额 |
+| 9 | return_qty | int | YES | 0 | 退货数量 |
+| 10 | return_amount | decimal(14,2) | YES | 0.00 | 退货金额 |
+| 11 | net_qty | int | YES | 0 | 净销量 |
+| 12 | net_amount | decimal(14,2) | YES | 0.00 | 净销售额 |
+| 13 | order_count | int | YES | 0 | 订单数 |
+| 14 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 15 | updated_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 16 | etl_time | datetime | YES |  | ETL时间戳 |
+| 17 | store_code | varchar(32) | YES |  | 源店仓编码（如 DS001） |
+| 18 | is_cloud_store | char(1) | YES | N | 是否云仓(Y/N) |
 
 ## etl_log
 - 描述: ETL执行日志表

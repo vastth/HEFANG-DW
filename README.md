@@ -54,7 +54,7 @@
 │  │ DWS汇总层: dws_sales_daily | dws_inventory_daily     │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ DIM维度层: dim_product | dim_store                   │   │
+│  │ DIM维度层: dim_product | dim_store | dim_sku         │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                            ▲
@@ -72,7 +72,7 @@
 | 数据层 | 名称 | 表前缀 | 说明 | 更新频率 |
 |--------|------|--------|------|----------|
 | **DIM** | 维度层 | `dim_*` | 商品、店仓等主数据 | 每日全量 |
-| **DWS** | 汇总层 | `dws_*` | 日粒度销售、库存明细 | 每日增量 |
+| **DWS** | 汇总层 | `dws_*` | 日粒度销售、库存明细 | 销售增量/库存快照 |
 | **ADS** | 应用层 | `ads_*` | 业务主题宽表（库存健康度等） | 每日全量 |
 
 ---
@@ -88,9 +88,10 @@ hefang_dw/
 ├── run_scheduled_etl.bat        # Windows计划任务脚本
 │
 ├── etl_dim_product.py           # 商品维度ETL
+├── etl_dim_sku.py               # SKU维度ETL
 ├── etl_dim_store.py             # 店仓维度ETL
-├── etl_dws_sales.py             # 销售明细ETL
-├── etl_dws_inventory.py         # 库存明细ETL
+├── etl_dws_sales.py             # 销售明细ETL（SKU粒度）
+├── etl_dws_inventory.py         # 库存明细ETL（SKU粒度）
 ├── etl_ads_health.py            # 库存健康度ETL
 ├── test_etl_automation.py       # ETL自动化测试
 │
@@ -114,7 +115,6 @@ hefang_dw/
 │   ├── 问题排查手册.md          # 常见问题与解决方案
 │   ├── mysql_data_dictionary.md # MySQL数据字典（主）
 │   └── misc/                    # 其他文档
-│       └── mysql_data_dictionary.md # 迁移自根目录的数据字典
 │
 ├── README.md                    # 本文档
 ├── logs/                        # 日志输出目录
@@ -179,11 +179,12 @@ python run_etl.py
 
 执行流程：
 ```
-[1/5] dim_product (商品维度) ✅
-[2/5] dim_store (店仓维度) ✅
-[3/5] dws_sales_daily (销售明细) ✅
-[4/5] dws_inventory_daily (库存明细) ✅
-[5/5] ads_inventory_health (库存健康度) ✅
+[1/6] dim_product (商品维度) ✅
+[2/6] dim_sku (SKU维度) ✅
+[3/6] dim_store (店仓维度) ✅
+[4/6] dws_sales_daily (销售明细) ✅
+[5/6] dws_inventory_daily (库存明细) ✅
+[6/6] ads_inventory_health (库存健康度) ✅
 ```
 
 ### 5. 验证数据
@@ -191,6 +192,7 @@ python run_etl.py
 ```sql
 -- 在MySQL中执行
 SELECT 'dim_product' AS 表名, COUNT(*) AS 记录数 FROM dim_product
+UNION ALL SELECT 'dim_sku', COUNT(*) FROM dim_sku
 UNION ALL SELECT 'dim_store', COUNT(*) FROM dim_store
 UNION ALL SELECT 'dws_sales_daily', COUNT(*) FROM dws_sales_daily
 UNION ALL SELECT 'dws_inventory_daily', COUNT(*) FROM dws_inventory_daily
@@ -220,6 +222,18 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 **源表**：Oracle `M_PRODUCT`, `M_DIM`  
 **更新策略**：每日全量覆盖
 
+#### `dim_sku` - SKU维度表
+| 字段 | 说明 | 备注 |
+|------|------|------|
+| sku_id | SKU ID | 主键/最小库存单位 |
+| product_id | 商品ID | 对应款号 |
+| sku_barcode | SKU条码 | - |
+| sku_color | 颜色 | - |
+| sku_size | 尺寸 | - |
+
+**源表**：Oracle `M_PRODUCT_ALIAS`, `M_ATTRIBUTESETINSTANCE`  
+**更新策略**：每日全量覆盖
+
 #### `dim_store` - 店仓维度表
 | 字段 | 说明 | 备注 |
 |------|------|------|
@@ -234,33 +248,37 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 ### 明细层 (DWS)
 
 #### `dws_sales_daily` - 销售明细表
-按日期+店仓+商品粒度统计销售数据
+按日期+店仓+SKU粒度统计销售数据
 
 | 字段 | 说明 | 计算逻辑 |
 |------|------|----------|
-| snapshot_date | 快照日期 | YYYYMMDD格式 |
+| date_id | 日期 | YYYYMMDD格式 |
 | store_code | 店仓编码 | - |
+| is_cloud_store | 云仓标识 | Y/N |
 | product_id | 商品ID | - |
+| m_productalias_id | SKU ID | - |
 | sales_qty | 销售数量 | 正单数量 |
 | return_qty | 退货数量 | 负单数量（绝对值）|
-| net_sales_qty | 净销量 | 销售-退货 |
+| net_qty | 净销量 | 销售-退货 |
 | sales_amount | 销售金额 | 正单金额 |
 
-**源表**：Oracle `M_RETAIL`, `M_RETAILITEM`  
-**更新策略**：增量更新（默认7天）
+**源表**：Oracle `M_RETAIL`, `M_RETAILITEM`, `C_STORE`, `M_PRODUCT`  
+**更新策略**：增量更新（智能判断：凌晨查昨天，白天查今天）
 
 #### `dws_inventory_daily` - 库存明细表
-按日期+店仓+商品粒度记录库存快照
+按日期+店仓+SKU粒度记录库存快照
 
 | 字段 | 说明 | 备注 |
 |------|------|------|
-| snapshot_date | 快照日期 | YYYYMMDD格式 |
+| date_id | 快照日期 | YYYYMMDD格式 |
 | store_code | 店仓编码 | - |
+| is_cloud_store | 云仓标识 | Y/N |
 | product_id | 商品ID | - |
+| m_productalias_id | SKU ID | - |
 | qty | 库存数量 | - |
 | qtypurchaserem | 采购欠数 | 在途库存（已下单未入库）|
 
-**源表**：Oracle `FA_STORAGE`  
+**源表**：Oracle `FA_STORAGE`, `C_STORE`, `M_PRODUCT`  
 **更新策略**：每日全量快照
 
 ### 应用层 (ADS)
@@ -271,19 +289,19 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | 字段分类 | 字段名 | 说明 |
 |----------|--------|------|
 | **基础信息** | product_id, product_code, product_name | 商品信息 |
+| | sku_id, sku_barcode, color, size | SKU信息 |
 | | brand, category, series, property | 分类属性 |
-| **库存指标** | current_inventory | 当前库存（总仓+云仓）|
-| | inventory_amount | 库存金额 |
+| **库存指标** | total_qty / warehouse_qty / cloud_qty | 总库存/总仓/云仓 |
 | | purchase_rem_qty | 采购欠数（在途库存）|
-| **销售指标** | sales_qty_7d / 30d / 90d | 近N天销售数量 |
-| | daily_avg_sales | 日均销量 |
-| | return_qty_30d | 近30天退货数量 |
+| **销售指标** | sales_qty_7d / sales_qty_30d | 近7天/30天销量 |
+| | sales_amt_30d | 近30天销售额 |
+| | return_qty_30d / return_amount_30d | 近30天退货量/退货额 |
+| | daily_avg_sales / daily_avg_sales_7d | 30天/7天日均销量 |
 | **周转指标** | turnover_days | 库存周转天数 |
 | | suggest_qty | 建议补货数量（可为负）|
-| **分级指标** | sku_level | SABC分级 |
-| | inventory_status | 库存状态（紧急缺货/需补货/正常等）|
-| **趋势指标** | sales_acceleration | 销售加速度 |
-| | sales_trend | 销售趋势 |
+| **分级指标** | sku_grade | SABC分级 |
+| | inventory_status / status_priority | 库存状态/优先级 |
+| **趋势指标** | sales_velocity / sales_trend | 销售加速度/趋势 |
 
 **核心算法**：
 ```
@@ -308,7 +326,7 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 - **B类**（70%-90%）：常规款，正常补货
 - **C类**（90%-100%+无销售）：长尾/滞销款
 
-**源表**：MySQL `dws_sales_daily`, `dws_inventory_daily`, `dim_product`, `dim_store`  
+**源表**：MySQL `dws_sales_daily`, `dws_inventory_daily`, `dim_product`, `dim_store`, `dim_sku`  
 **更新策略**：每日全量重算
 
 ---
@@ -343,11 +361,8 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 ### 回补历史数据
 
 ```bash
-# 回补近90天销售数据
-python etl_dws_sales.py --days 90
-
-# 回补近90天库存数据
-python etl_dws_inventory.py --days 90
+# 回补近90天销售数据（示例）
+python -c "from etl_dws_sales import backfill; backfill(20251102, 20260130)"
 
 # 重算库存健康度
 python etl_ads_health.py
@@ -414,7 +429,7 @@ python export_ads.py
 3. 日期字段：snapshot_date (YYYYMMDD格式)
 
 4. 数量字段：qty / amount / count
-   示例：sales_qty, inventory_amount, store_count
+   示例：sales_qty, total_qty, store_count
 
 5. 标识字段：is_xxx / has_xxx
    示例：is_cloud_store, has_sales
@@ -458,6 +473,7 @@ hotfix/* - 紧急修复
 | v1.0 | 2026-01-15 | 初始版本，包含DIM/DWS/ADS层 | tianxiaoyu911@gmail.com |
 | v1.1 | 2026-01-19 | 新增采购欠数字段，优化建议补货算法 | tianxiaoyu911@gmail.com |
 | v1.2 | 2026-01-20 | 文档重构，新增架构说明与使用指南 | tianxiaoyu911@gmail.com |
+| v1.3 | 2026-01-30 | SKU维度与SKU粒度同步，销售智能判断与口径统一 | tianxiaoyu911@gmail.com |
 
 ---
 
