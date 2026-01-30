@@ -5,9 +5,10 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 import os
+from sqlalchemy import create_engine, text
 
 # 配置日志
 logging.basicConfig(
@@ -40,7 +41,7 @@ def run_all():
     results = {}
     
     # 1. 商品维度
-    logger.info("\n>>> [1/5] Syncing product dimensions...")
+    logger.info("\n>>> [1/6] Syncing product dimensions...")
     try:
         from etl_dim_product import run as run_dim_product
         run_dim_product()
@@ -50,8 +51,19 @@ def run_all():
         results['dim_product'] = f'FAILED: {error_msg[:100]}'
         logger.error(f"dim_product failed: {error_msg}")
     
-    # 2. 店仓维度
-    logger.info("\n>>> [2/5] Syncing store dimensions...")
+    # 2. SKU维度
+    logger.info("\n>>> [2/6] Syncing sku dimensions...")
+    try:
+        from etl_dim_sku import run as run_dim_sku
+        run_dim_sku()
+        results['dim_sku'] = 'SUCCESS'
+    except Exception as e:
+        error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+        results['dim_sku'] = f'FAILED: {error_msg[:100]}'
+        logger.error(f"dim_sku failed: {error_msg}")
+
+    # 3. 店仓维度
+    logger.info("\n>>> [3/6] Syncing store dimensions...")
     try:
         from etl_dim_store import run as run_dim_store
         run_dim_store()
@@ -61,19 +73,42 @@ def run_all():
         results['dim_store'] = f'FAILED: {error_msg[:100]}'
         logger.error(f"dim_store failed: {error_msg}")
     
-    # 3. 销售数据
-    logger.info("\n>>> [3/5] Syncing sales data...")
+    # 4. 销售数据
+    logger.info("\n>>> [4/6] Syncing sales data...")
     try:
-        from etl_dws_sales import run as run_dws_sales
-        run_dws_sales(days_back=1)  # 默认同步昨天
+        from etl_dws_sales import run as run_dws_sales, backfill as backfill_dws_sales
+        run_dws_sales(days_back=1, include_today=True)  # 实时同步（含当天）
+
+        # 覆盖性校验：若近30天数据不完整，则自动回补
+        end_dt = datetime.now() - timedelta(days=1)
+        start_dt = end_dt - timedelta(days=29)
+        end_date = int(end_dt.strftime('%Y%m%d'))
+        start_date = int(start_dt.strftime('%Y%m%d'))
+
+        from config import MYSQL_CONN_STR
+        engine = create_engine(MYSQL_CONN_STR)
+        with engine.connect() as conn:
+            row = conn.execute(text(
+                """
+                SELECT COUNT(DISTINCT date_id) AS day_cnt
+                FROM dws_sales_daily
+                WHERE date_id BETWEEN :start_date AND :end_date
+                """
+            ), {"start_date": start_date, "end_date": end_date}).fetchone()
+        engine.dispose()
+
+        day_cnt = row[0] if row else 0
+        if day_cnt < 30:
+            logger.warning(f"近30天销售数据仅覆盖{day_cnt}天，执行回补（{start_date} - {end_date}）...")
+            backfill_dws_sales(start_date, end_date)
         results['dws_sales'] = 'SUCCESS'
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
         results['dws_sales'] = f'FAILED: {error_msg[:100]}'
         logger.error(f"dws_sales failed: {error_msg}")
     
-    # 4. 库存数据
-    logger.info("\n>>> [4/5] Syncing inventory data...")
+    # 5. 库存数据
+    logger.info("\n>>> [5/6] Syncing inventory data...")
     try:
         from etl_dws_inventory import run as run_dws_inventory
         run_dws_inventory()
@@ -83,8 +118,8 @@ def run_all():
         results['dws_inventory'] = f'FAILED: {error_msg[:100]}'
         logger.error(f"dws_inventory failed: {error_msg}")
     
-    # 5. 库存健康度计算
-    logger.info("\n>>> [5/5] Calculating inventory health...")
+    # 6. 库存健康度计算
+    logger.info("\n>>> [6/6] Calculating inventory health...")
     try:
         from etl_ads_health import run as run_ads_health
         run_ads_health()

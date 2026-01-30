@@ -31,6 +31,10 @@ def ensure_table_columns(engine):
     """确保ads_inventory_health表有新增的字段"""
     
     new_columns = [
+        ("sku_id", "BIGINT DEFAULT NULL COMMENT 'SKU主键(M_PRODUCT_ALIAS.ID)'"),
+        ("sku_barcode", "VARCHAR(80) DEFAULT NULL COMMENT '条码(M_PRODUCT_ALIAS.NO)'"),
+        ("color", "VARCHAR(50) DEFAULT NULL COMMENT '颜色'"),
+        ("size", "VARCHAR(50) DEFAULT NULL COMMENT '尺寸'"),
         ("return_qty_30d", "INT DEFAULT 0 COMMENT '近30天退货数量'"),
         ("purchase_rem_qty", "INT DEFAULT 0 COMMENT '采购欠数/在途库存'"),
         ("sales_velocity", "DECIMAL(5,2) DEFAULT NULL COMMENT '销售加速度(7天日均/30天日均)'"),
@@ -75,7 +79,7 @@ def calculate_inventory_health():
     # 优化后的大SQL：一次性计算所有指标
     sql = f"""
      INSERT INTO ads_inventory_health 
-     (snapshot_date, product_id, product_code, product_name, category_id, category_name,
+     (snapshot_date, product_id, sku_id, sku_barcode, color, size, product_code, product_name, category_id, category_name,
       property_id, property_name, series_id, series_name, price_list, total_qty, warehouse_qty, cloud_qty,
           purchase_rem_qty, sales_qty_30d, sales_amt_30d, sales_qty_7d, return_qty_30d,
       return_amount_30d, daily_avg_sales, daily_avg_sales_7d, sales_velocity,
@@ -84,6 +88,10 @@ def calculate_inventory_health():
     SELECT
         {today} AS snapshot_date,
         p.product_id,
+        inv.sku_id,
+        sku.sku_barcode,
+        sku.sku_color,
+        sku.sku_size,
         p.product_code,
         p.product_name,
         p.category_id,
@@ -177,6 +185,7 @@ def calculate_inventory_health():
         -- 库存汇总（总仓+云仓，含采购欠数）- 作为主表
         SELECT
             i.product_id,
+            i.m_productalias_id AS sku_id,
             SUM(i.qty) AS total_qty,
             SUM(CASE WHEN s.store_code = '001' THEN i.qty ELSE 0 END) AS warehouse_qty,
             SUM(CASE WHEN s.is_cloud_store = 'Y' THEN i.qty ELSE 0 END) AS cloud_qty,
@@ -184,31 +193,36 @@ def calculate_inventory_health():
         FROM dws_inventory_daily i
         LEFT JOIN dim_store s ON i.store_id = s.store_id
         WHERE i.date_id = {today}
+            AND i.m_productalias_id IS NOT NULL
             AND (s.store_code = '001' OR s.is_cloud_store = 'Y')
-        GROUP BY i.product_id
+        GROUP BY i.product_id, i.m_productalias_id
     ) inv
     
     -- 关联商品维度
     LEFT JOIN dim_product p ON inv.product_id = p.product_id
+    LEFT JOIN dim_sku sku ON inv.sku_id = sku.sku_id
     
     -- 销售汇总（含退货数量）
     LEFT JOIN (
         SELECT
-            product_id,
+            ds.product_id,
+            ds.m_productalias_id AS sku_id,
             -- 销售数量（正单）
-            SUM(sales_qty) AS sales_qty_30d,
+            SUM(ds.sales_qty) AS sales_qty_30d,
             -- 近30天销售金额（使用 dws_sales_daily.sales_amount 汇总，避免 qty*price_list 估算误差）
-            SUM(sales_amount) AS sales_amt_30d,
-            SUM(CASE WHEN date_id >= {date_7_ago} THEN sales_qty ELSE 0 END) AS sales_qty_7d,
+            SUM(ds.sales_amount) AS sales_amt_30d,
+            SUM(CASE WHEN ds.date_id >= {date_7_ago} THEN ds.sales_qty ELSE 0 END) AS sales_qty_7d,
             -- ⭐新增：退货数量/退货金额
-            SUM(return_qty) AS return_qty_30d,
-            SUM(return_amount) AS return_amount_30d
-        FROM dws_sales_daily
-        WHERE date_id >= {date_30_ago}
-            -- ⭐按口径：电商+云仓门店
-            AND (store_code LIKE 'DS%%' OR is_cloud_store = 'Y')
-        GROUP BY product_id
-    ) sales ON inv.product_id = sales.product_id
+            SUM(ds.return_qty) AS return_qty_30d,
+            SUM(ds.return_amount) AS return_amount_30d
+        FROM dws_sales_daily ds
+        LEFT JOIN dim_store s ON ds.store_id = s.store_id
+        WHERE ds.date_id >= {date_30_ago}
+            -- ⭐按口径：电商+云仓门店（使用dim_store口径，避免dws字段历史为空）
+            AND (s.store_code LIKE 'DS%%' OR s.is_cloud_store = 'Y')
+            AND ds.m_productalias_id IS NOT NULL
+        GROUP BY ds.product_id, ds.m_productalias_id
+    ) sales ON inv.product_id = sales.product_id AND inv.sku_id = sales.sku_id
     
     WHERE p.is_main_product = 'Y'
         -- ⚠️ 注意：现在以库存表为主，自动只包含dws_inventory_daily中有记录的商品
@@ -257,17 +271,17 @@ def update_sku_grade():
     sql_update = f"""
     UPDATE ads_inventory_health a
     JOIN (
-        SELECT product_id, sales_amt_30d, total_sales, cum_sales, sales_rank FROM (
+        SELECT sku_id, sales_amt_30d, total_sales, cum_sales, sales_rank FROM (
             SELECT
-                product_id,
+                sku_id,
                 COALESCE(sales_amt_30d, 0) AS sales_amt_30d,
                 SUM(COALESCE(sales_amt_30d,0)) OVER () AS total_sales,
-                SUM(COALESCE(sales_amt_30d,0)) OVER (ORDER BY COALESCE(sales_amt_30d,0) DESC, product_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_sales,
-                ROW_NUMBER() OVER (ORDER BY COALESCE(sales_amt_30d,0) DESC, product_id) AS sales_rank
+                SUM(COALESCE(sales_amt_30d,0)) OVER (ORDER BY COALESCE(sales_amt_30d,0) DESC, sku_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_sales,
+                ROW_NUMBER() OVER (ORDER BY COALESCE(sales_amt_30d,0) DESC, sku_id) AS sales_rank
             FROM ads_inventory_health
             WHERE snapshot_date = {today}
         ) t
-    ) r ON a.product_id = r.product_id AND a.snapshot_date = {today}
+    ) r ON a.sku_id = r.sku_id AND a.snapshot_date = {today}
     SET
         a.sales_rank = r.sales_rank,
         a.sales_ratio = ROUND(r.sales_amt_30d / NULLIF(r.total_sales, 0) * 100, 2),

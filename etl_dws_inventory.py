@@ -30,12 +30,20 @@ def extract_from_oracle():
     sql = """
     SELECT
         fs.C_STORE_ID AS store_id,
+        s.CODE AS store_code,
+        NVL(s.IS_ALLO2OSTORAGE, 'N') AS is_cloud_store,
         fs.M_PRODUCT_ID AS product_id,
+        fs.M_PRODUCTALIAS_ID AS m_productalias_id,
         fs.QTY AS qty,
         fs.QTY AS qty_valid,
         NVL(fs.QTYPURCHASEREM, 0) AS qtypurchaserem
     FROM FA_STORAGE fs
+    LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
+    LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
     WHERE fs.ISACTIVE = 'Y'
+        AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+        AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+        AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
     """
 
     logger.info("连接Oracle数据库...")
@@ -71,16 +79,28 @@ def transform(df):
     # 转换数据类型
     df['store_id'] = df['store_id'].astype('int64')
     df['product_id'] = df['product_id'].astype('int64')
+    if 'm_productalias_id' in df.columns:
+        df['m_productalias_id'] = df['m_productalias_id'].astype('Int64')
+    else:
+        df['m_productalias_id'] = pd.Series([pd.NA] * len(df), dtype='Int64')
 
     # 处理空值
     df['qty'] = df['qty'].fillna(0)
     df['qty_valid'] = df['qty_valid'].fillna(0)
+    if 'store_code' in df.columns:
+        df['store_code'] = df['store_code'].fillna('')
+    else:
+        df['store_code'] = ''
+    if 'is_cloud_store' in df.columns:
+        df['is_cloud_store'] = df['is_cloud_store'].fillna('N')
+    else:
+        df['is_cloud_store'] = 'N'
 
-    # 去重：如果同一个(store_id, product_id)有多条记录，合并数量与在途采购欠数
-    duplicate_count = len(df) - len(df.groupby(['store_id', 'product_id']).size())
+    # 去重：如果同一个(store_id, product_id, m_productalias_id)有多条记录，合并数量与在途采购欠数
+    duplicate_count = len(df) - len(df.groupby(['store_id', 'product_id', 'm_productalias_id']).size())
     if duplicate_count > 0:
-        logger.warning(f"发现 {duplicate_count} 条重复记录，将按(store_id, product_id)合并数量")
-        df = df.groupby(['store_id', 'product_id'], as_index=False).agg({
+        logger.warning(f"发现 {duplicate_count} 条重复记录，将按(store_id, product_id, m_productalias_id)合并数量")
+        df = df.groupby(['store_id', 'product_id', 'm_productalias_id'], as_index=False).agg({
             'qty': 'sum',
             'qty_valid': 'sum',
             'qtypurchaserem': 'sum'
@@ -99,7 +119,7 @@ def transform(df):
     # 调整列顺序（匹配MySQL表结构，新增 qtypurchaserem）
     if 'qtypurchaserem' not in df.columns:
         df['qtypurchaserem'] = 0
-    df = df[['date_id', 'store_id', 'product_id', 'qty', 'qty_valid', 'qty_occupy', 'qtypurchaserem', 'etl_time']]
+    df = df[['date_id', 'store_id', 'store_code', 'is_cloud_store', 'product_id', 'm_productalias_id', 'qty', 'qty_valid', 'qty_occupy', 'qtypurchaserem', 'etl_time']]
 
     logger.info(f"转换完成，共 {len(df)} 条记录")
     return df

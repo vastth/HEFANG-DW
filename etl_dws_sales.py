@@ -32,6 +32,7 @@ def extract_from_oracle(start_date, end_date):
         s.CODE AS store_code,
         NVL(s.IS_ALLO2OSTORAGE, 'N') AS is_cloud_store,
         ri.M_PRODUCT_ID AS product_id,
+        ri.M_PRODUCTALIAS_ID AS m_productalias_id,
         -- 销售数据（正单）
         SUM(CASE WHEN r.TOT_AMT_ACTUAL > 0 THEN ri.QTY ELSE 0 END) AS sales_qty,
         SUM(CASE WHEN r.TOT_AMT_ACTUAL > 0 THEN ri.TOT_AMT_ACTUAL ELSE 0 END) AS sales_amount,
@@ -44,11 +45,15 @@ def extract_from_oracle(start_date, end_date):
     FROM M_RETAILITEM ri
     LEFT JOIN M_RETAIL r ON ri.M_RETAIL_ID = r.ID
     LEFT JOIN C_STORE s ON r.C_STORE_ID = s.ID
+    LEFT JOIN M_PRODUCT p ON ri.M_PRODUCT_ID = p.ID
     WHERE r.ISACTIVE = 'Y' 
         AND r.STATUS = 2
         AND r.BILLDATE >= {start_date}
         AND r.BILLDATE <= {end_date}
-    GROUP BY r.BILLDATE, r.C_STORE_ID, s.CODE, NVL(s.IS_ALLO2OSTORAGE, 'N'), ri.M_PRODUCT_ID
+        AND ri.M_PRODUCTALIAS_ID IS NOT NULL
+        AND (s.CODE LIKE 'DS%' OR s.IS_ALLO2OSTORAGE = 'Y')
+        AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
+    GROUP BY r.BILLDATE, r.C_STORE_ID, s.CODE, NVL(s.IS_ALLO2OSTORAGE, 'N'), ri.M_PRODUCT_ID, ri.M_PRODUCTALIAS_ID
     """
     
     logger.info("连接Oracle数据库...")
@@ -85,6 +90,10 @@ def transform(df):
     df['date_id'] = df['date_id'].astype('int64')
     df['store_id'] = df['store_id'].astype('int64')
     df['product_id'] = df['product_id'].astype('int64')
+    if 'm_productalias_id' in df.columns:
+        df['m_productalias_id'] = df['m_productalias_id'].astype('Int64')
+    else:
+        df['m_productalias_id'] = pd.Series([pd.NA] * len(df), dtype='Int64')
     # store_code/is_cloud_store 来自 C_STORE
     if 'store_code' in df.columns:
         df['store_code'] = df['store_code'].fillna('')
@@ -118,28 +127,31 @@ def load_to_mysql(df, start_date, end_date):
     logger.info("连接MySQL数据库...")
     engine = create_engine(MYSQL_CONN_STR)
     
-    # 先删除该日期范围的旧数据
-    logger.info(f"删除旧数据（{start_date} - {end_date}）...")
-    with engine.begin() as conn:
-        conn.execute(text(f"DELETE FROM dws_sales_daily WHERE date_id >= {start_date} AND date_id <= {end_date}"))
-    
-    logger.info("写入新数据...")
-    df.to_sql(
-        name='dws_sales_daily',
-        con=engine,
-        if_exists='append',
-        index=False,
-        chunksize=5000
-    )
-    
-    logger.info(f"写入完成，共 {len(df)} 条记录")
-    engine.dispose()
+    try:
+        with engine.begin() as conn:
+            # 先删除该日期范围的旧数据
+            logger.info(f"删除旧数据（{start_date} - {end_date}）...")
+            conn.execute(text(f"DELETE FROM dws_sales_daily WHERE date_id >= {start_date} AND date_id <= {end_date}"))
+            
+            logger.info("写入新数据...")
+            df.to_sql(
+                name='dws_sales_daily',
+                con=conn,
+                if_exists='append',
+                index=False,
+                chunksize=5000
+            )
+        
+        logger.info(f"写入完成，共 {len(df)} 条记录")
+    finally:
+        engine.dispose()
 
 
-def run(days_back=1):
+def run(days_back=1, include_today=False):
     """
-    执行ETL
-    days_back: 回溯天数，默认1（只同步昨天）
+    执行ETL（智能判断模式）
+    days_back: 回溯天数，默认1（只同步昨天/今天）
+    include_today: 是否启用智能模式，默认False
     """
     
     start_time = datetime.now()
@@ -147,8 +159,23 @@ def run(days_back=1):
     logger.info("开始执行 dws_sales_daily ETL")
     logger.info("="*50)
     
-    # 计算日期范围
-    end_dt = datetime.now() - timedelta(days=1)  # 昨天
+    # 计算日期范围（智能判断）
+    current_time = datetime.now()
+    current_hour = current_time.hour
+    if include_today:
+        if 0 <= current_hour < 6:
+            # 凌晨执行：查询昨天完整数据
+            end_dt = current_time - timedelta(days=1)
+            logger.info("模式：凌晨执行，查询昨天完整数据")
+        else:
+            # 白天执行：查询今天实时数据
+            end_dt = current_time
+            logger.info("模式：白天执行，查询今天实时数据")
+    else:
+        # 强制查询昨天
+        end_dt = current_time - timedelta(days=1)
+        logger.info("模式：强制查询昨天数据")
+
     start_dt = end_dt - timedelta(days=days_back-1)
     
     start_date = int(start_dt.strftime('%Y%m%d'))
