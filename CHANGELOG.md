@@ -2,6 +2,28 @@
 
 > 说明：按 git 提交时间线整理。
 
+## 2026-02-04
+
+###  — feat: 达播/自然销量与销售额同步到库存健康度（David）
+- 达播就绪检查 + 回填，新增达播/自然销量与销售额字段，补充最新日期与兼容性修复
+  - [etl_ads_health.py](etl_ads_health.py)
+  - [run_etl.py](run_etl.py)
+
+###  — docs: 达播外部ETL与口径同步（David）
+- 同步达播外部ETL说明、指标口径与字段定义
+  - [docs/达播数据运营上传指南.md](docs/达播数据运营上传指南.md)
+  - [docs/数据仓库与ETL手册.md](docs/数据仓库与ETL手册.md)
+  - [docs/数据结构与映射手册.md](docs/数据结构与映射手册.md)
+  - [docs/业务逻辑与指标规范.md](docs/业务逻辑与指标规范.md)
+  - [docs/SQL开发手册.md](docs/SQL开发手册.md)
+  - [docs/mysql_data_dictionary.md](docs/mysql_data_dictionary.md)
+
+###  — sql: ads_inventory_health 字段变更脚本（David）
+- 新增达播/自然销量、达播最新日期、达播/自然销售额字段
+  - [SQL/alter_ads_inventory_health_add_dabo_natural_fields.sql](SQL/alter_ads_inventory_health_add_dabo_natural_fields.sql)
+  - [SQL/alter_ads_inventory_health_add_dabo_latest_date.sql](SQL/alter_ads_inventory_health_add_dabo_latest_date.sql)
+  - [SQL/alter_ads_inventory_health_add_dabo_revenue_fields.sql](SQL/alter_ads_inventory_health_add_dabo_revenue_fields.sql)
+
 ## 2026-01-30
 
 ### cfeb3a1 — 补一条遗漏的推送（David）
