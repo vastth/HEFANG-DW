@@ -41,7 +41,7 @@ def run_all():
     results = {}
     
     # 1. 商品维度
-    logger.info("\n>>> [1/6] Syncing product dimensions...")
+    logger.info("\n>>> [1/7] Syncing product dimensions...")
     try:
         from etl_dim_product import run as run_dim_product
         run_dim_product()
@@ -52,7 +52,7 @@ def run_all():
         logger.error(f"dim_product failed: {error_msg}")
     
     # 2. SKU维度
-    logger.info("\n>>> [2/6] Syncing sku dimensions...")
+    logger.info("\n>>> [2/7] Syncing sku dimensions...")
     try:
         from etl_dim_sku import run as run_dim_sku
         run_dim_sku()
@@ -63,7 +63,7 @@ def run_all():
         logger.error(f"dim_sku failed: {error_msg}")
 
     # 3. 店仓维度
-    logger.info("\n>>> [3/6] Syncing store dimensions...")
+    logger.info("\n>>> [3/7] Syncing store dimensions...")
     try:
         from etl_dim_store import run as run_dim_store
         run_dim_store()
@@ -74,7 +74,7 @@ def run_all():
         logger.error(f"dim_store failed: {error_msg}")
     
     # 4. 销售数据
-    logger.info("\n>>> [4/6] Syncing sales data...")
+    logger.info("\n>>> [4/7] Syncing sales data...")
     try:
         from etl_dws_sales import run as run_dws_sales, backfill as backfill_dws_sales
         run_dws_sales(days_back=1, include_today=True)  # 实时同步（含当天）
@@ -108,7 +108,7 @@ def run_all():
         logger.error(f"dws_sales failed: {error_msg}")
     
     # 5. 库存数据
-    logger.info("\n>>> [5/6] Syncing inventory data...")
+    logger.info("\n>>> [5/7] Syncing inventory data...")
     try:
         from etl_dws_inventory import run as run_dws_inventory
         run_dws_inventory()
@@ -117,12 +117,46 @@ def run_all():
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
         results['dws_inventory'] = f'FAILED: {error_msg[:100]}'
         logger.error(f"dws_inventory failed: {error_msg}")
-    
-    # 6. 库存健康度计算
-    logger.info("\n>>> [6/6] Calculating inventory health...")
+
+    # 6. 达播数据就绪检查（外部项目产出）
+    logger.info("\n>>> [6/7] Checking dabo data readiness...")
+    dabo_ready = False
     try:
-        from etl_ads_health import run as run_ads_health
+        from config import MYSQL_CONN_STR
+        engine = create_engine(MYSQL_CONN_STR)
+        today = datetime.now().strftime('%Y-%m-%d')
+        with engine.connect() as conn:
+            row = conn.execute(text(
+                """
+                SELECT COUNT(*) AS cnt, MAX(sale_date) AS latest_date
+                FROM ads_dabo_daily_sales
+                WHERE sale_date = :today
+                """
+            ), {"today": today}).fetchone()
+        engine.dispose()
+
+        dabo_cnt = row[0] if row else 0
+        latest_date = row[1] if row else None
+        if dabo_cnt > 0:
+            dabo_ready = True
+            logger.info(f"达播数据就绪：今日记录 {dabo_cnt} 条（latest_date={latest_date}）")
+        else:
+            logger.warning(f"达播数据未就绪：今日无记录（latest_date={latest_date}），将继续执行ADS计算")
+        results['dabo_ready'] = 'SUCCESS' if dabo_ready else 'WARNING: NO_DATA_TODAY'
+    except Exception as e:
+        error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+        results['dabo_ready'] = f'FAILED: {error_msg[:100]}'
+        logger.error(f"dabo_ready check failed: {error_msg}")
+    
+    # 7. 库存健康度计算
+    logger.info("\n>>> [7/7] Calculating inventory health...")
+    try:
+        from etl_ads_health import run as run_ads_health, backfill_dabo_fields
         run_ads_health()
+
+        # 达播数据就绪时，回填当日达播/自然字段（避免外部项目时序影响）
+        if dabo_ready:
+            backfill_dabo_fields()
         results['ads_health'] = 'SUCCESS'
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')

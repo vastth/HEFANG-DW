@@ -30,12 +30,14 @@ WHERE p.ISACTIVE = 'Y'
 
 ---
 
-### 1.2 主销品类别筛选
+### 1.2 主销品类别筛选（口径类SQL）
 
 ```sql
--- 这个ID列表要背下来
+-- 这个ID列表要背下来（用于销售/ADS等口径统计）
 AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
 ```
+
+> 说明：库存明细快照可保留全量SKU，主销品过滤可在ADS层统一控制。
 
 ---
 
@@ -299,7 +301,24 @@ ORDER BY r.BILLDATE;
 
 ---
 
-### 3.4 缺货商品清单（MySQL）
+### 3.4 达播日销售汇总
+
+```sql
+-- 业务问题：达播每天销量和销售额
+SELECT
+    sale_date AS 日期,
+    SUM(dabo_sales_qty) AS 销量,
+    SUM(dabo_revenue) AS 销售额,
+    SUM(dabo_order_count) AS 订单数
+FROM ads_dabo_daily_sales
+WHERE sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+GROUP BY sale_date
+ORDER BY sale_date;
+```
+
+---
+
+### 3.5 缺货商品清单（MySQL）
 
 ```sql
 -- 业务问题：哪些A类商品要断货了？
@@ -319,7 +338,7 @@ ORDER BY turnover_days;
 
 ---
 
-### 3.5 滞销商品清单（MySQL）
+### 3.6 滞销商品清单（MySQL）
 
 ```sql
 -- 业务问题：哪些货卖不动？
@@ -338,7 +357,7 @@ ORDER BY 库存金额 DESC;
 
 ---
 
-### 3.6 各类别库存分布（MySQL）
+### 3.7 各类别库存分布（MySQL）
 
 ```sql
 -- 业务问题：库存在各品类怎么分布？
@@ -355,7 +374,7 @@ ORDER BY 库存数量 DESC;
 
 ---
 
-### 3.7 同比分析（Oracle）
+### 3.8 同比分析（Oracle）
 
 ```sql
 -- 业务问题：和去年同期比怎么样？
@@ -381,7 +400,7 @@ FROM today t, lastyear l;
 
 ---
 
-### 3.8 退货分析（Oracle）
+### 3.9 退货分析（Oracle）
 
 ```sql
 -- 业务问题：退货率高的商品有哪些？
@@ -416,7 +435,7 @@ ORDER BY 退货率 DESC;
 写完SQL后检查：
 - [ ] ISACTIVE = 'Y' 加了？
 - [ ] STATUS = 2 加了（零售单）？
-- [ ] 主销品类别筛选了？
+- [ ] 主销品类别筛选了？（口径类SQL/ADS）
 - [ ] SKU过滤（M_PRODUCTALIAS_ID IS NOT NULL）加了？
 - [ ] 渠道口径（DS%或云仓）加了？
 - [ ] 日期范围正确？
@@ -508,4 +527,4 @@ ROUND(数值, 小数位数)
 
 ---
 
-*文档版本: 2.1 | 更新日期: 2026-01-30 | 合并文档4、15、19*
+*文档版本: 2.1 | 更新日期: 2026-02-04  *

@@ -39,6 +39,18 @@ def ensure_table_columns(engine):
         ("purchase_rem_qty", "INT DEFAULT 0 COMMENT '采购欠数/在途库存'"),
         ("sales_velocity", "DECIMAL(5,2) DEFAULT NULL COMMENT '销售加速度(7天日均/30天日均)'"),
         ("daily_avg_sales_7d", "DECIMAL(10,2) DEFAULT 0 COMMENT '近7天日均销量'"),
+        ("dabo_sales_qty_30d", "INT DEFAULT 0 COMMENT '近30天达播销量'"),
+        ("dabo_sales_qty_7d", "INT DEFAULT 0 COMMENT '近7天达播销量'"),
+        ("natural_sales_qty_30d", "INT DEFAULT 0 COMMENT '近30天自然销量(全量-达播)'"),
+        ("natural_sales_qty_7d", "INT DEFAULT 0 COMMENT '近7天自然销量(全量-达播)'"),
+        ("dabo_revenue_30d", "DECIMAL(14,2) DEFAULT 0.00 COMMENT '近30天达播销售额'"),
+        ("dabo_revenue_7d", "DECIMAL(14,2) DEFAULT 0.00 COMMENT '近7天达播销售额'"),
+        ("natural_revenue_30d", "DECIMAL(14,2) DEFAULT 0.00 COMMENT '近30天自然销售额(全量-达播)'"),
+        ("natural_revenue_7d", "DECIMAL(14,2) DEFAULT 0.00 COMMENT '近7天自然销售额(全量-达播)'"),
+        ("natural_daily_avg_sales", "DECIMAL(10,2) DEFAULT 0 COMMENT '近30天自然日均销量'"),
+        ("natural_daily_avg_sales_7d", "DECIMAL(10,2) DEFAULT 0 COMMENT '近7天自然日均销量'"),
+        ("natural_sales_velocity", "DECIMAL(5,2) DEFAULT NULL COMMENT '自然销售加速度'"),
+        ("dabo_latest_date", "DATE DEFAULT NULL COMMENT '达播最新日期(按SKU)'"),
         ("status_priority", "INT DEFAULT NULL COMMENT '库存状态优先级(1紧急缺货->6停售)'"),
         ("created_at", "DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'"),
     ]
@@ -75,15 +87,21 @@ def calculate_inventory_health():
     today = int(datetime.now().strftime('%Y%m%d'))
     date_30_ago = int((datetime.now() - timedelta(days=30)).strftime('%Y%m%d'))
     date_7_ago = int((datetime.now() - timedelta(days=7)).strftime('%Y%m%d'))
+    today_date = datetime.now().strftime('%Y-%m-%d')
+    date_30_ago_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    date_7_ago_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     
     # 优化后的大SQL：一次性计算所有指标
     sql = f"""
      INSERT INTO ads_inventory_health 
-     (snapshot_date, product_id, sku_id, sku_barcode, color, size, product_code, product_name, category_id, category_name,
-      property_id, property_name, series_id, series_name, price_list, total_qty, warehouse_qty, cloud_qty,
-          purchase_rem_qty, sales_qty_30d, sales_amt_30d, sales_qty_7d, return_qty_30d,
-      return_amount_30d, daily_avg_sales, daily_avg_sales_7d, sales_velocity,
-      turnover_days, inventory_status, sku_grade, suggest_qty, status_priority, etl_time, created_at)
+    (snapshot_date, product_id, sku_id, sku_barcode, color, size, product_code, product_name, category_id, category_name,
+     property_id, property_name, series_id, series_name, price_list, total_qty, warehouse_qty, cloud_qty,
+     purchase_rem_qty, sales_qty_30d, sales_amt_30d, sales_qty_7d, return_qty_30d,
+     return_amount_30d, daily_avg_sales, daily_avg_sales_7d, sales_velocity,
+     dabo_sales_qty_30d, dabo_sales_qty_7d, dabo_latest_date, dabo_revenue_30d, dabo_revenue_7d,
+     natural_sales_qty_30d, natural_sales_qty_7d, natural_revenue_30d, natural_revenue_7d,
+     natural_daily_avg_sales, natural_daily_avg_sales_7d, natural_sales_velocity,
+     turnover_days, inventory_status, sku_grade, suggest_qty, status_priority, etl_time, created_at)
     
     SELECT
         {today} AS snapshot_date,
@@ -132,6 +150,34 @@ def calculate_inventory_health():
             WHEN COALESCE(sales.sales_qty_30d, 0) = 0 THEN NULL
             ELSE ROUND((COALESCE(sales.sales_qty_7d, 0) / 7) / (COALESCE(sales.sales_qty_30d, 0) / 30), 2)
         END AS sales_velocity,
+
+        -- ⭐新增：达播销量（近30天/近7天）
+        COALESCE(dabo.dabo_sales_qty_30d, 0) AS dabo_sales_qty_30d,
+        COALESCE(dabo.dabo_sales_qty_7d, 0) AS dabo_sales_qty_7d,
+        dabo.dabo_latest_date AS dabo_latest_date,
+        COALESCE(dabo.dabo_revenue_30d, 0) AS dabo_revenue_30d,
+        COALESCE(dabo.dabo_revenue_7d, 0) AS dabo_revenue_7d,
+
+        -- ⭐新增：自然销量（全量-达播）
+        (COALESCE(sales.sales_qty_30d, 0) - COALESCE(dabo.dabo_sales_qty_30d, 0)) AS natural_sales_qty_30d,
+        (COALESCE(sales.sales_qty_7d, 0) - COALESCE(dabo.dabo_sales_qty_7d, 0)) AS natural_sales_qty_7d,
+
+        -- ⭐新增：自然销售额（全量-达播）
+        (COALESCE(sales.sales_amt_30d, 0) - COALESCE(dabo.dabo_revenue_30d, 0)) AS natural_revenue_30d,
+        (COALESCE(sales.sales_amt_7d, 0) - COALESCE(dabo.dabo_revenue_7d, 0)) AS natural_revenue_7d,
+
+        -- ⭐新增：自然日均销量（30天/7天）
+        ROUND((COALESCE(sales.sales_qty_30d, 0) - COALESCE(dabo.dabo_sales_qty_30d, 0)) / 30, 2) AS natural_daily_avg_sales,
+        ROUND((COALESCE(sales.sales_qty_7d, 0) - COALESCE(dabo.dabo_sales_qty_7d, 0)) / 7, 2) AS natural_daily_avg_sales_7d,
+
+        -- ⭐新增：自然销售加速度 = 自然7天日均 / 自然30天日均
+        CASE
+            WHEN (COALESCE(sales.sales_qty_30d, 0) - COALESCE(dabo.dabo_sales_qty_30d, 0)) = 0 THEN NULL
+            ELSE ROUND(
+                ((COALESCE(sales.sales_qty_7d, 0) - COALESCE(dabo.dabo_sales_qty_7d, 0)) / 7)
+                / ((COALESCE(sales.sales_qty_30d, 0) - COALESCE(dabo.dabo_sales_qty_30d, 0)) / 30)
+            , 2)
+        END AS natural_sales_velocity,
         
         -- 周转天数
         CASE 
@@ -211,6 +257,7 @@ def calculate_inventory_health():
             SUM(ds.sales_qty) AS sales_qty_30d,
             -- 近30天销售金额（使用 dws_sales_daily.sales_amount 汇总，避免 qty*price_list 估算误差）
             SUM(ds.sales_amount) AS sales_amt_30d,
+            SUM(CASE WHEN ds.date_id >= {date_7_ago} THEN ds.sales_amount ELSE 0 END) AS sales_amt_7d,
             SUM(CASE WHEN ds.date_id >= {date_7_ago} THEN ds.sales_qty ELSE 0 END) AS sales_qty_7d,
             -- ⭐新增：退货数量/退货金额
             SUM(ds.return_qty) AS return_qty_30d,
@@ -223,8 +270,24 @@ def calculate_inventory_health():
             AND ds.m_productalias_id IS NOT NULL
         GROUP BY ds.product_id, ds.m_productalias_id
     ) sales ON inv.product_id = sales.product_id AND inv.sku_id = sales.sku_id
+
+    -- 达播销量汇总（按SKU条码）
+    LEFT JOIN (
+        SELECT
+            product_alias_code COLLATE utf8mb4_unicode_ci AS sku_barcode,
+            SUM(dabo_sales_qty) AS dabo_sales_qty_30d,
+            SUM(CASE WHEN sale_date >= '{date_7_ago_date}' THEN dabo_sales_qty ELSE 0 END) AS dabo_sales_qty_7d,
+            SUM(dabo_revenue) AS dabo_revenue_30d,
+            SUM(CASE WHEN sale_date >= '{date_7_ago_date}' THEN dabo_revenue ELSE 0 END) AS dabo_revenue_7d,
+            MAX(sale_date) AS dabo_latest_date
+        FROM ads_dabo_daily_sales
+        WHERE sale_date >= '{date_30_ago_date}'
+          AND sale_date <= '{today_date}'
+        GROUP BY product_alias_code COLLATE utf8mb4_unicode_ci
+    ) dabo ON sku.sku_barcode COLLATE utf8mb4_unicode_ci = dabo.sku_barcode
     
     WHERE p.is_main_product = 'Y'
+        AND p.category_id IN (134,142,139,138,141,143,133,136,140,137,144,145)
         -- ⚠️ 注意：现在以库存表为主，自动只包含dws_inventory_daily中有记录的商品
         --         这与Oracle SQL逻辑完全一致（FROM stock st LEFT JOIN sales sa）
     """
@@ -395,6 +458,82 @@ def print_summary():
         print("="*60 + "\n")
     
     engine.dispose()
+
+
+def backfill_dabo_fields(snapshot_date=None):
+    """回填达播/自然字段（默认仅当天）"""
+
+    if snapshot_date is None:
+        snapshot_date = int(datetime.now().strftime('%Y%m%d'))
+
+    snapshot_dt = datetime.strptime(str(snapshot_date), '%Y%m%d')
+    date_30_ago = (snapshot_dt - timedelta(days=30)).strftime('%Y-%m-%d')
+    date_7_ago = (snapshot_dt - timedelta(days=7)).strftime('%Y-%m-%d')
+    snapshot_date_str = snapshot_dt.strftime('%Y-%m-%d')
+
+    logger.info(f"回填达播/自然字段（snapshot_date={snapshot_date}）...")
+    engine = create_engine(MYSQL_CONN_STR)
+
+    sql_dabo = f"""
+    UPDATE ads_inventory_health a
+    LEFT JOIN (
+        SELECT
+            product_alias_code COLLATE utf8mb4_unicode_ci AS sku_barcode,
+            SUM(dabo_sales_qty) AS dabo_30d,
+            SUM(CASE WHEN sale_date >= '{date_7_ago}' THEN dabo_sales_qty ELSE 0 END) AS dabo_7d,
+            SUM(dabo_revenue) AS dabo_revenue_30d,
+            SUM(CASE WHEN sale_date >= '{date_7_ago}' THEN dabo_revenue ELSE 0 END) AS dabo_revenue_7d,
+            MAX(sale_date) AS dabo_latest_date
+        FROM ads_dabo_daily_sales
+        WHERE sale_date BETWEEN '{date_30_ago}' AND '{snapshot_date_str}'
+        GROUP BY product_alias_code COLLATE utf8mb4_unicode_ci
+    ) d ON a.sku_barcode COLLATE utf8mb4_unicode_ci = d.sku_barcode
+    SET
+        a.dabo_sales_qty_30d = COALESCE(d.dabo_30d, 0),
+        a.dabo_sales_qty_7d = COALESCE(d.dabo_7d, 0),
+        a.dabo_revenue_30d = COALESCE(d.dabo_revenue_30d, 0),
+        a.dabo_revenue_7d = COALESCE(d.dabo_revenue_7d, 0),
+        a.dabo_latest_date = d.dabo_latest_date
+    WHERE a.snapshot_date = {snapshot_date}
+    """
+
+    date_7_ago_id = int((snapshot_dt - timedelta(days=7)).strftime('%Y%m%d'))
+    sql_natural = f"""
+    UPDATE ads_inventory_health a
+    LEFT JOIN (
+        SELECT
+            ds.m_productalias_id AS sku_id,
+            SUM(ds.sales_amount) AS sales_amt_7d
+        FROM dws_sales_daily ds
+        LEFT JOIN dim_store s ON ds.store_id = s.store_id
+        WHERE ds.date_id >= {date_7_ago_id}
+          AND (s.store_code LIKE 'DS%%' OR s.is_cloud_store = 'Y')
+          AND ds.m_productalias_id IS NOT NULL
+        GROUP BY ds.m_productalias_id
+    ) s7 ON a.sku_id = s7.sku_id
+    SET
+        a.natural_sales_qty_30d = COALESCE(a.sales_qty_30d, 0) - COALESCE(a.dabo_sales_qty_30d, 0),
+        a.natural_sales_qty_7d = COALESCE(a.sales_qty_7d, 0) - COALESCE(a.dabo_sales_qty_7d, 0),
+        a.natural_revenue_30d = COALESCE(a.sales_amt_30d, 0) - COALESCE(a.dabo_revenue_30d, 0),
+        a.natural_revenue_7d = COALESCE(s7.sales_amt_7d, 0) - COALESCE(a.dabo_revenue_7d, 0),
+        a.natural_daily_avg_sales = ROUND((COALESCE(a.sales_qty_30d, 0) - COALESCE(a.dabo_sales_qty_30d, 0)) / 30, 2),
+        a.natural_daily_avg_sales_7d = ROUND((COALESCE(a.sales_qty_7d, 0) - COALESCE(a.dabo_sales_qty_7d, 0)) / 7, 2),
+        a.natural_sales_velocity = CASE
+            WHEN (COALESCE(a.sales_qty_30d, 0) - COALESCE(a.dabo_sales_qty_30d, 0)) = 0 THEN NULL
+            ELSE ROUND(
+                ((COALESCE(a.sales_qty_7d, 0) - COALESCE(a.dabo_sales_qty_7d, 0)) / 7)
+                / ((COALESCE(a.sales_qty_30d, 0) - COALESCE(a.dabo_sales_qty_30d, 0)) / 30)
+            , 2)
+        END
+    WHERE a.snapshot_date = {snapshot_date}
+    """
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(sql_dabo))
+            conn.execute(text(sql_natural))
+    finally:
+        engine.dispose()
 
 
 def run():

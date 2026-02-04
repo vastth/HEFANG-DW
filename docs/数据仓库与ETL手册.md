@@ -231,6 +231,7 @@ CREATE TABLE dws_inventory_daily (
 -- 数据来源
 库存数据 ← dws_inventory_daily (当天)
 销售数据 ← dws_sales_daily (近30天)
+达播销量 ← ads_dabo_daily_sales (近30天/近7天)
 商品信息 ← dim_product
 SKU信息 ← dim_sku
 仓库信息 ← dim_store
@@ -240,6 +241,7 @@ SKU信息 ← dim_sku
 - 库存状态（滞销/缺货/正常/过高）
 - ABC分级（按销售额累计占比）
 - 建议补货 = (90-周转天数)*日均销量 - 退货 - 采购欠数
+- 自然销量 = 全量销量 - 达播销量（用于自然销售加速度与趋势判断）
 ```
 
 ---
@@ -254,8 +256,10 @@ SKU信息 ← dim_sku
 | dim_sku | M_PRODUCT_ALIAS + M_ATTRIBUTESETINSTANCE | 全量覆盖 | SKU信息可能改 |
 | dim_store | C_STORE + C_AREA | 全量覆盖 | 门店可能新增 |
 | dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天 |
-| dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存 |
+| dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存（不做主销品类过滤） |
 | ads_inventory_health | MySQL内计算 | 重新计算 | 基于dws层 |
+| ads_dabo_daily_sales | CSV文件 | 文件驱动 | 监听例行/紧急目录 |
+| log_dabo_import | ETL日志 | 追加写入 | 每次导入记录 |
 
 ---
 
@@ -268,9 +272,11 @@ SKU信息 ← dim_sku
 03:10  同步dim_store（约1分钟）
 03:12  同步dws_sales_daily（智能判断）（约5分钟）
 03:17  同步dws_inventory_daily（约10分钟）
+03:25  达播数据就绪检查/回填（当日）
 03:27  计算ads_inventory_health（约5分钟）
 03:32  ETL结束
 06:00  Tableau数据源刷新
+实时  达播CSV监听（例行/紧急目录）
 ```
 
 ---
@@ -334,16 +340,29 @@ df = oracle.query("""
     FROM FA_STORAGE fs
         LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
         LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
-    WHERE fs.ISACTIVE = 'Y'
-      AND fs.M_PRODUCTALIAS_ID IS NOT NULL
-      AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
-      AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
+        WHERE fs.ISACTIVE = 'Y'
+            AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+            AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+        -- 库存快照不做主销品过滤，口径在ADS层统一控制
 """)
 df['date_id'] = int(today)
 df['qty_occupy'] = 0
 
 # 写入
 mysql.to_sql(df, 'dws_inventory_daily', if_exists='append')
+```
+
+---
+
+### 3.5 达播CSV同步逻辑
+
+> 说明：达播数据ETL已独立为外部项目，本仓库仅保留流程概览与口径说明。
+
+```
+触发方式：监听例行/紧急目录
+处理流程：读取CSV → 字段校验 → 清洗 → 按发货日期+SKU聚合 → SKU匹配校验
+写入策略：删除近60天数据后插入
+异常处理：命名不符/校验失败/重复文件 → 隔离或跳过
 ```
 
 **为什么要每日快照**：
@@ -353,7 +372,7 @@ mysql.to_sql(df, 'dws_inventory_daily', if_exists='append')
 
 ---
 
-### 3.5 应用表计算逻辑
+### 3.6 应用表计算逻辑
 
 ads_inventory_health不从Oracle抽，而是在MySQL内计算：
 
@@ -361,6 +380,7 @@ ads_inventory_health不从Oracle抽，而是在MySQL内计算：
 -- 数据来源
 库存数据 ← dws_inventory_daily (当天)
 销售数据 ← dws_sales_daily (近30天)
+达播销量 ← ads_dabo_daily_sales (近30天/近7天)
 商品信息 ← dim_product
 SKU信息 ← dim_sku
 仓库信息 ← dim_store
@@ -372,6 +392,8 @@ SKU信息 ← dim_sku
 4. 判断库存状态
 5. 计算ABC分级
 6. 生成建议补货
+7. 计算自然销量与自然加速度（全量销量 - 达播销量）
+8. 达播数据就绪时回填当日达播/自然字段
 ```
 
 ---
@@ -517,4 +539,4 @@ ETL_CONFIG = {
 
 ---
 
-*文档版本: 2.1 | 更新日期: 2026-01-30 | 合并文档5、17*
+*文档版本: 2.1 | 更新日期: 2026-02-04 *

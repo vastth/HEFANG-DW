@@ -16,6 +16,8 @@
 
 **何方珠宝数据仓库**是一个为广东何方珠宝有限公司打造的企业级数据仓库解决方案，旨在整合线上线下全渠道销售与库存数据，支撑库存优化、补货决策、销售分析等业务需求。
 
+**更新日志**：详见 [CHANGELOG.md](CHANGELOG.md)
+
 ### 业务背景
 - **企业**：广东何方珠宝有限公司（HEFANG Jewelry）
 - **主营**：时尚珠宝首饰（925银饰为主）
@@ -179,12 +181,13 @@ python run_etl.py
 
 执行流程：
 ```
-[1/6] dim_product (商品维度) ✅
-[2/6] dim_sku (SKU维度) ✅
-[3/6] dim_store (店仓维度) ✅
-[4/6] dws_sales_daily (销售明细) ✅
-[5/6] dws_inventory_daily (库存明细) ✅
-[6/6] ads_inventory_health (库存健康度) ✅
+[1/7] dim_product (商品维度) ✅
+[2/7] dim_sku (SKU维度) ✅
+[3/7] dim_store (店仓维度) ✅
+[4/7] dws_sales_daily (销售明细) ✅
+[5/7] dws_inventory_daily (库存明细) ✅
+[6/7] dabo_ready (达播数据就绪检查/回填) ✅
+[7/7] ads_inventory_health (库存健康度) ✅
 ```
 
 ### 5. 验证数据

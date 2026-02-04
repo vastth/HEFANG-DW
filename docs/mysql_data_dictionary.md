@@ -49,26 +49,38 @@
 | 17 | total_qty | int | YES | 0 | 总库存 |
 | 18 | warehouse_qty | int | YES | 0 | 总仓库存 |
 | 19 | cloud_qty | int | YES | 0 | 云仓库存 |
-| 20 | sales_qty_30d | int | YES | 0 | 近30天销量 |
-| 21 | sales_amt_30d | decimal(14,2) | YES | 0.00 | 近30天销售额 |
+| 20 | sales_qty_30d | int | YES | 0 | 近30天销量（全量） |
+| 21 | sales_amt_30d | decimal(14,2) | YES | 0.00 | 近30天销售额（全量） |
 | 22 | return_qty_30d | int | YES | 0 | 近30天退货量 |
-| 23 | sales_qty_7d | int | YES | 0 | 近7天销量 |
-| 24 | daily_avg_sales | decimal(10,2) | YES |  | 日均销量30天 |
-| 25 | daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天日均销量 |
-| 26 | sales_velocity | decimal(5,2) | YES |  | 销售加速度 |
-| 27 | sales_trend | varchar(20) | YES |  | 销售趋势 |
-| 28 | turnover_days | decimal(10,1) | YES |  | 周转天数 |
-| 29 | inventory_status | varchar(20) | YES |  | 库存状态 |
-| 30 | status_priority | int | YES |  | 状态优先级 |
-| 31 | sku_grade | char(1) | YES |  | SABC分级 |
-| 32 | sales_rank | int | YES |  | 销售排名 |
-| 33 | sales_ratio | decimal(5,2) | YES |  | 销售占比 |
-| 34 | cumulative_ratio | decimal(5,2) | YES |  | 累计占比 |
-| 35 | suggest_qty | int | YES | 0 | 建议补货数量 |
-| 36 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
-| 37 | etl_time | datetime | YES |  | ETL时间戳 |
-| 38 | purchase_rem_qty | int | YES | 0 | 采购欠数/在途库存 |
-| 39 | return_amount_30d | decimal(14,2) | YES | 0.00 |  |
+| 23 | sales_qty_7d | int | YES | 0 | 近7天销量（全量） |
+| 24 | dabo_sales_qty_30d | int | YES | 0 | 近30天达播销量 |
+| 25 | dabo_sales_qty_7d | int | YES | 0 | 近7天达播销量 |
+| 26 | dabo_latest_date | date | YES |  | 达播最新日期（按SKU） |
+| 27 | dabo_revenue_30d | decimal(14,2) | YES | 0.00 | 近30天达播销售额 |
+| 28 | dabo_revenue_7d | decimal(14,2) | YES | 0.00 | 近7天达播销售额 |
+| 29 | natural_sales_qty_30d | int | YES | 0 | 近30天自然销量（全量-达播） |
+| 30 | natural_sales_qty_7d | int | YES | 0 | 近7天自然销量（全量-达播） |
+| 31 | natural_revenue_30d | decimal(14,2) | YES | 0.00 | 近30天自然销售额（全量-达播） |
+| 32 | natural_revenue_7d | decimal(14,2) | YES | 0.00 | 近7天自然销售额（全量-达播） |
+| 33 | daily_avg_sales | decimal(10,2) | YES |  | 日均销量30天（全量） |
+| 34 | daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天日均销量（全量） |
+| 35 | natural_daily_avg_sales | decimal(10,2) | YES | 0.00 | 近30天自然日均销量 |
+| 36 | natural_daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天自然日均销量 |
+| 37 | sales_velocity | decimal(5,2) | YES |  | 销售加速度（全量） |
+| 38 | natural_sales_velocity | decimal(5,2) | YES |  | 自然销售加速度 |
+| 39 | sales_trend | varchar(20) | YES |  | 销售趋势（全量） |
+| 40 | turnover_days | decimal(10,1) | YES |  | 周转天数 |
+| 41 | inventory_status | varchar(20) | YES |  | 库存状态 |
+| 42 | status_priority | int | YES |  | 状态优先级 |
+| 43 | sku_grade | char(1) | YES |  | SABC分级 |
+| 44 | sales_rank | int | YES |  | 销售排名 |
+| 45 | sales_ratio | decimal(5,2) | YES |  | 销售占比 |
+| 46 | cumulative_ratio | decimal(5,2) | YES |  | 累计占比 |
+| 47 | suggest_qty | int | YES | 0 | 建议补货数量 |
+| 48 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 49 | etl_time | datetime | YES |  | ETL时间戳 |
+| 50 | purchase_rem_qty | int | YES | 0 | 采购欠数/在途库存 |
+| 51 | return_amount_30d | decimal(14,2) | YES | 0.00 |  |
 
 ## ads_sales_summary
 - 描述: 销售汇总应用表
@@ -91,6 +103,37 @@
 | 14 | sku_count | int | YES | 0 | 动销SKU数 |
 | 15 | avg_price | decimal(10,2) | YES |  | 客单价 |
 | 16 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
+
+## ads_dabo_daily_sales
+- 描述: 达播日销售应用表
+
+| 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | sale_date | date | NO |  | 发货日期 |
+| 2 | product_alias_code | varchar(80) | NO |  | SKU条码 |
+| 3 | dabo_sales_qty | int | NO | 0 | 销量 |
+| 4 | dabo_order_count | int | NO | 0 | 订单数 |
+| 5 | dabo_revenue | decimal(14,2) | NO | 0.00 | 实收金额 |
+| 6 | created_at | datetime | NO | CURRENT_TIMESTAMP |  |
+| 7 | updated_at | datetime | NO | CURRENT_TIMESTAMP |  |
+
+## log_dabo_import
+- 描述: 达播CSV导入日志
+
+| 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | id | bigint | NO |  |  |
+| 2 | file_name | varchar(255) | NO |  | 文件名 |
+| 3 | file_path | varchar(500) | YES |  | 文件路径 |
+| 4 | records_total | int | NO | 0 | 原始行数 |
+| 5 | records_after_filter | int | NO | 0 | 过滤后行数 |
+| 6 | records_inserted | int | NO | 0 | 写入行数 |
+| 7 | sku_match_rate | decimal(5,4) | YES |  | SKU匹配率 |
+| 8 | status | varchar(20) | NO |  | 状态 |
+| 9 | message | varchar(1000) | YES |  | 错误信息 |
+| 10 | started_at | datetime | YES |  | 开始时间 |
+| 11 | finished_at | datetime | YES |  | 结束时间 |
+| 12 | created_at | datetime | NO | CURRENT_TIMESTAMP |  |
 
 ## dim_category
 - 描述: 类别维度表
@@ -206,7 +249,7 @@
 | 13 | updated_at | datetime | YES | CURRENT_TIMESTAMP |  |
 
 ## dws_inventory_daily
-- 描述: 日库存快照表
+- 描述: 日库存快照表（全量SKU，不做主销品类别过滤）
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |

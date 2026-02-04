@@ -43,7 +43,6 @@ def extract_from_oracle():
     WHERE fs.ISACTIVE = 'Y'
         AND fs.M_PRODUCTALIAS_ID IS NOT NULL
         AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
-        AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
     """
 
     logger.info("连接Oracle数据库...")
