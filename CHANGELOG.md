@@ -2,7 +2,6 @@
 
 > 说明：按日期与版本整理，条目按“Added / Changed / Fixed / Database / Docs”分类。
 
-## 2026-02-04
 
 ## 2026-02-06
 
