@@ -103,9 +103,30 @@ ETL_DEFAULT_MAX_RETRIES = int(os.getenv('ETL_MAX_RETRIES', '3'))
 ETL_DEFAULT_RETRY_SLEEP = int(os.getenv('ETL_RETRY_SLEEP', '60'))
 
 # 可选：用于测试/校验时从 Oracle 拉取对比数据的 SQL 模板
-# 示例：
-# ORACLE_VERIFY_QUERIES = {
-#     'dws_inventory_main_products': "SELECT COUNT(DISTINCT product_id) FROM some_oracle_table WHERE ...",
-#     'ads_health_total': "SELECT COUNT(*) FROM some_oracle_table WHERE ...",
-# }
-ORACLE_VERIFY_QUERIES = {}
+# 来自 docs/SQL开发手册.md 与 SQL/库存健康度_SKU粒度_v5.0.sql 的标准口径。
+_MAIN_CATEGORY_IDS_SQL = ",".join(str(x) for x in MAIN_CATEGORY_IDS)
+ORACLE_VERIFY_QUERIES = {
+        # 对齐 test_etl_automation.py 中“主销品商品数(总仓+云仓)”口径
+        'dws_inventory_main_products': f"""
+                SELECT COUNT(DISTINCT p.ID)
+                FROM FA_STORAGE fs
+                LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
+                LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
+                WHERE fs.ISACTIVE = 'Y'
+                    AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+                    AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+                    AND p.M_DIM4_ID IN ({_MAIN_CATEGORY_IDS_SQL})
+        """,
+
+        # 对齐库存健康度（SKU粒度）基表口径：统计可参与计算的SKU条码数
+        'ads_health_total': f"""
+                SELECT COUNT(DISTINCT fs.M_PRODUCTALIAS_ID)
+                FROM FA_STORAGE fs
+                LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
+                LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
+                WHERE fs.ISACTIVE = 'Y'
+                    AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+                    AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+                    AND p.M_DIM4_ID IN ({_MAIN_CATEGORY_IDS_SQL})
+        """,
+}
