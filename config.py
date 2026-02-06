@@ -101,3 +101,11 @@ ETL_RETRYABLE_ERROR_KEYWORDS = [
 # 默认重试参数（可通过环境变量在运行时覆盖）
 ETL_DEFAULT_MAX_RETRIES = int(os.getenv('ETL_MAX_RETRIES', '3'))
 ETL_DEFAULT_RETRY_SLEEP = int(os.getenv('ETL_RETRY_SLEEP', '60'))
+
+# 可选：用于测试/校验时从 Oracle 拉取对比数据的 SQL 模板
+# 示例：
+# ORACLE_VERIFY_QUERIES = {
+#     'dws_inventory_main_products': "SELECT COUNT(DISTINCT product_id) FROM some_oracle_table WHERE ...",
+#     'ads_health_total': "SELECT COUNT(*) FROM some_oracle_table WHERE ...",
+# }
+ORACLE_VERIFY_QUERIES = {}

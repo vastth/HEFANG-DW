@@ -7,7 +7,7 @@ ETL自动化测试与验证脚本
 import pymysql
 import sys
 from datetime import datetime
-from config import MYSQL_CONFIG
+from config import MYSQL_CONFIG, ORACLE_CONFIG, ORACLE_DSN, ORACLE_VERIFY_QUERIES
 
 # 配置UTF-8输出
 if hasattr(sys.stdout, 'reconfigure'):
@@ -22,6 +22,29 @@ def get_mysql_conn():
         password=MYSQL_CONFIG['password'],
         database=MYSQL_CONFIG['database']
     )
+
+
+def get_oracle_count(key):
+    """如果在 config.ORACLE_VERIFY_QUERIES 中提供 SQL，则连接 Oracle 并返回第一列第一行的数值。
+
+    若未配置或查询失败，返回 None。
+    """
+    sql = ORACLE_VERIFY_QUERIES.get(key)
+    if not sql:
+        return None
+    try:
+        import oracledb
+        conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
+        cur = conn.cursor()
+        cur.execute(sql)
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return int(row[0])
+    except Exception as e:
+        print(f"  ❌ 从 Oracle 执行验证 SQL 失败 ({key}): {e}")
+    return None
 
 def test_dim_product():
     """测试商品维度表"""
@@ -139,8 +162,13 @@ def test_dws_inventory():
     main_products = cursor.fetchone()[0]
     print(f"  主销品商品数(总仓+云仓): {main_products:,}")
     
-    # 与Oracle对比
-    oracle_count = 2508
+    # 与Oracle对比：优先使用 config.ORACLE_VERIFY_QUERIES 中提供的 SQL 拉取对比值
+    oracle_count = get_oracle_count('dws_inventory_main_products')
+    if oracle_count is None:
+        # 回退到历史固定值（便于快速验证），建议在 config.py 中配置实际的 Oracle 验证 SQL
+        oracle_count = 2508
+        print("  (提示) 未在 config.ORACLE_VERIFY_QUERIES 中配置 dws_inventory_main_products，使用回退常量进行比较。")
+
     diff = main_products - oracle_count
     print(f"  Oracle SQL数据量: {oracle_count:,}")
     print(f"  差异: {diff:+,} ({abs(diff)/oracle_count*100:.2f}%)")
@@ -263,8 +291,12 @@ def test_ads_health():
     print(f"    库存过剩: {restock[1]:,.0f}件")
     print(f"    过剩SKU: {restock[2]}个")
     
-    # 与Oracle对比
-    oracle_count = 2508
+    # 与Oracle对比：优先使用 config.ORACLE_VERIFY_QUERIES 中提供的 SQL 拉取对比值
+    oracle_count = get_oracle_count('ads_health_total')
+    if oracle_count is None:
+        oracle_count = 2508
+        print("  (提示) 未在 config.ORACLE_VERIFY_QUERIES 中配置 ads_health_total，使用回退常量进行比较。")
+
     diff = total - oracle_count
     print(f"\n  Oracle SQL数据量: {oracle_count:,}")
     print(f"  MySQL ETL数据量: {total:,}")
