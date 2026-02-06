@@ -173,6 +173,28 @@ python test_connection.py
 ✅ MySQL连接成功！
 ```
 
+### 3.1 告警与快速测试（新增）
+
+项目支持通过企业微信机器人发送告警，并提供安全的连接测试模式以验证告警与重试策略：
+
+- 环境变量：
+   - `WECHAT_WEBHOOK`：企业微信机器人完整 webhook URL（建议通过环境变量注入，不要写入代码仓库）。
+   - `ETL_CONN_TEST`：设置为 `1` 或在命令行添加 `--conn-test` 启用“仅连接测试”模式（不会写入数据）。
+   - `ETL_MAX_RETRIES`：可选，覆盖默认最大重试次数（默认 3）。
+   - `ETL_RETRY_SLEEP`：可选，覆盖重试间隔秒数（默认 60）。
+
+- 使用示例（临时设置并运行连接测试）：
+
+```powershell
+$env:WECHAT_WEBHOOK = 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY'
+$env:ETL_CONN_TEST = '1'
+$env:ETL_MAX_RETRIES = '1'  # 仅尝试一次，便于快速验证告警
+python run_etl.py --conn-test
+```
+
+- 说明：当脚本检测到不可重试的确定性错误（例如认证失败 ORA-01017、MySQL 1045），会立即发送告警并放弃重试，以避免无意义的重复尝试。告警文本会自动使用 `config.py` 中的 `TASK_DISPLAY_NAME` 将任务 ID 映射为友好中文描述。
+
+
 ### 4. 首次全量ETL
 
 ```bash
