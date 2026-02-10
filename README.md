@@ -131,12 +131,17 @@ hefang_dw/
 
 **依赖安装**
 ```bash
-pip install cx_Oracle pymysql pandas openpyxl
+# 推荐使用 python-oracledb（thin 模式）或当需要时安装 Oracle Instant Client
+pip install python-oracledb pymysql pandas openpyxl
 ```
 
-**Oracle Instant Client**（Windows系统需配置）
-- 下载：https://www.oracle.com/database/technologies/instant-client/downloads.html
-- 解压并配置环境变量：`PATH`添加instantclient路径
+**Oracle 连接说明（thin vs Instant Client）**
+- `python-oracledb` 支持两种模式：
+   - thin 模式（纯 Python，通常无需安装 Oracle Instant Client，适合大多数场景）。
+   - thick/OCI 模式（依赖 Oracle Instant Client），当需要使用某些 Oracle 客户端特性或更高性能时才需要安装。详见官方文档。
+- 如果你确实需要安装 Instant Client（Windows），请参考：
+   - 下载：https://www.oracle.com/database/technologies/instant-client/downloads.html
+   - 解压并配置环境变量：将 instantclient 路径加入 `PATH`。
 
 ### 2. 配置数据库连接
 
@@ -193,6 +198,43 @@ python run_etl.py --conn-test
 ```
 
 - 说明：当脚本检测到不可重试的确定性错误（例如认证失败 ORA-01017、MySQL 1045），会立即发送告警并放弃重试，以避免无意义的重复尝试。告警文本会自动使用 `config.py` 中的 `TASK_DISPLAY_NAME` 将任务 ID 映射为友好中文描述。
+
+ - 模块与配置位置说明：
+    - 告警实现：`alerts.py`（项目根目录），替换告警渠道时可直接修改或替换此模块。
+    - 告警显示名称：`config.py` 中的 `TASK_DISPLAY_NAME`，可直接在配置中修改友好名称或做国际化处理。
+
+ - Oracle 校验 SQL（可选）：
+    - 为避免测试中使用硬编码常量，可在 `config.py` 中配置 `ORACLE_VERIFY_QUERIES` 字典，示例：
+
+```python
+# config.py
+ORACLE_VERIFY_QUERIES = {
+      'dws_inventory_main_products': """
+            SELECT COUNT(DISTINCT p.ID)
+            FROM FA_STORAGE fs
+            LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
+            LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
+            WHERE fs.ISACTIVE = 'Y'
+               AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+               AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+               AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
+      """,
+      'ads_health_total': """
+            SELECT COUNT(DISTINCT fs.M_PRODUCTALIAS_ID)
+            FROM FA_STORAGE fs
+            LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
+            LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
+            WHERE fs.ISACTIVE = 'Y'
+               AND fs.M_PRODUCTALIAS_ID IS NOT NULL
+               AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+               AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
+      """,
+}
+```
+
+    - `test_etl_automation.py` 会优先使用上述 SQL 从 Oracle 拉取对比计数，若未配置则回退到测试常量（便于快速运行）。
+
+ - 关于销售负数：脚本中将销售表中的负数视为退货并计入统计（属于正常业务）；仅在负数数量异常增多时才会触发告警。
 
 
 ### 4. 首次全量ETL
