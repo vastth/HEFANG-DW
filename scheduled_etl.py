@@ -8,6 +8,7 @@ import os
 import sys
 from datetime import datetime
 import logging
+import subprocess
 
 # 设置工作目录
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,18 +46,18 @@ def run_etl_with_error_handling():
         logger.info(f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("="*80)
         
-        # 导入并执行ETL
-        from run_etl import run_all
-        success = run_all()
-        
-        if success:
+        # 统一走 run_etl.py 入口（内含重试与企业微信摘要）
+        run_etl_file = os.path.join(PROJECT_DIR, 'run_etl.py')
+        result = subprocess.run([sys.executable, run_etl_file], cwd=PROJECT_DIR)
+
+        if result.returncode == 0:
             logger.info("✅ ETL执行成功")
-            
+
             # 执行测试验证
             logger.info("\n开始执行数据验证...")
             from test_etl_automation import main as test_main
             test_success = test_main()
-            
+
             if test_success:
                 logger.info("✅ 数据验证通过")
                 return 0
@@ -64,8 +65,8 @@ def run_etl_with_error_handling():
                 logger.warning("⚠️ 数据验证发现问题")
                 return 1
         else:
-            logger.error("❌ ETL执行失败")
-            return 2
+            logger.error(f"❌ ETL执行失败，退出码: {result.returncode}")
+            return result.returncode
             
     except Exception as e:
         logger.error(f"❌ ETL调度异常: {e}", exc_info=True)

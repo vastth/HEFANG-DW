@@ -15,7 +15,7 @@ echo ========================================================================
 REM 激活Python环境（如果使用虚拟环境）
 REM call venv\Scripts\activate.bat
 
-REM 执行ETL
+REM 执行ETL（scheduled_etl.py 内部统一调用 run_etl.py，含重试与企业微信摘要）
 python scheduled_etl.py
 
 REM 检查执行结果

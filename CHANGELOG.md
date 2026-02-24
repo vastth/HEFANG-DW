@@ -3,6 +3,25 @@
 > 说明：按日期与版本整理，条目按“Added / Changed / Fixed / Database / Docs”分类。
 
 
+## 2026-02-24
+
+### v0.6.2 — ETL摘要通知与调度入口统一（2026-02-24）
+
+#### Changed
+- `run_etl.py`：将 7 步 ETL 输出统一为结构化步骤报告（状态/详情/耗时），并在成功或失败场景都发送企业微信摘要。
+- `run_etl.py`：统一摘要模板包含执行时间、总耗时、成功/警告/失败计数、步骤明细；失败时附加重试信息与失败原因。
+- `run_etl.py`：重试等待参数改为读取 `ETL_RETRY_SLEEP`（默认回落到 `ETL_DEFAULT_RETRY_SLEEP`）。
+- `scheduled_etl.py`：改为调用 `run_etl.py` 统一入口，避免多入口行为漂移；仅在 ETL 成功后继续执行 `test_etl_automation.py`。
+- `run_scheduled_etl.bat`：同步说明当前链路为统一入口（含重试与摘要发送）。
+
+#### Docs
+- 更新 `README.md`：补充“成功/失败都发送企业微信统一摘要”策略与调度入口说明。
+- 更新 `docs/数据仓库与ETL手册.md`：同步调度方式、异常处理与日常检查项。
+
+#### Verified
+- 本地连接测试模式（`ETL_CONN_TEST=1`、`ETL_MAX_RETRIES=1`）验证通过，企业微信成功收到摘要消息。
+
+
 ## 2026-02-06
 
 ### v0.6.1 — 告警与重试逻辑重构（2026-02-06）

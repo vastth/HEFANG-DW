@@ -40,6 +40,134 @@ PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 
+STEP_ORDER = [
+    'dim_product',
+    'dim_sku',
+    'dim_store',
+    'dws_sales',
+    'dws_inventory',
+    'dabo_ready',
+    'ads_health',
+]
+
+
+def _truncate_text(text, max_len=160):
+    if not isinstance(text, str):
+        return ''
+    return text if len(text) <= max_len else text[:max_len] + '...'
+
+
+def _status_from_legacy_message(message):
+    if not isinstance(message, str):
+        return 'UNKNOWN', ''
+    msg_upper = message.upper()
+    if msg_upper.startswith('FAILED') or 'ERROR' in msg_upper:
+        detail = message.split(':', 1)[1].strip() if ':' in message else message
+        return 'FAILED', _truncate_text(detail)
+    if msg_upper.startswith('WARNING'):
+        detail = message.split(':', 1)[1].strip() if ':' in message else message
+        return 'WARNING', _truncate_text(detail)
+    if msg_upper.startswith('SUCCESS'):
+        detail = message.split(':', 1)[1].strip() if ':' in message else ''
+        return 'SUCCESS', _truncate_text(detail)
+    return 'UNKNOWN', _truncate_text(message)
+
+
+def _normalize_step_reports(step_reports):
+    normalized = {}
+    if not step_reports:
+        return normalized
+
+    for task, payload in step_reports.items():
+        if isinstance(payload, dict):
+            status = str(payload.get('status', 'UNKNOWN')).upper()
+            detail = _truncate_text(str(payload.get('detail', '')).strip())
+            duration = payload.get('duration_seconds')
+            normalized[task] = {
+                'status': status,
+                'detail': detail,
+                'duration_seconds': duration,
+            }
+            continue
+
+        status, detail = _status_from_legacy_message(payload)
+        normalized[task] = {
+            'status': status,
+            'detail': detail,
+            'duration_seconds': None,
+        }
+
+    return normalized
+
+
+def _compose_run_summary_message(step_reports, overall_status, started_at, ended_at, attempt=None, max_retries=None, extra_message=None):
+    normalized = _normalize_step_reports(step_reports)
+    all_steps = [k for k in STEP_ORDER if k in normalized]
+    if not all_steps:
+        all_steps = list(normalized.keys())
+
+    success_cnt = 0
+    warning_cnt = 0
+    failed_cnt = 0
+    for task in all_steps:
+        st = normalized[task]['status']
+        if st == 'SUCCESS':
+            success_cnt += 1
+        elif st == 'WARNING':
+            warning_cnt += 1
+        elif st in ('FAILED', 'ERROR'):
+            failed_cnt += 1
+
+    duration_seconds = int((ended_at - started_at).total_seconds())
+    title_map = {
+        'SUCCESS': '✅ ETL执行完成',
+        'FAILED': '❌ ETL执行完成（存在失败）',
+        'ERROR': '❌ ETL执行异常',
+    }
+    status_icon = {
+        'SUCCESS': '✅',
+        'WARNING': '⚠️',
+        'FAILED': '❌',
+        'ERROR': '❌',
+        'UNKNOWN': '❔',
+    }
+
+    title = title_map.get(overall_status, '📊 ETL执行摘要')
+    lines = [title]
+    lines.append(f"时间: {started_at.strftime('%Y-%m-%d %H:%M:%S')} ~ {ended_at.strftime('%H:%M:%S')}")
+    lines.append(f"耗时: {duration_seconds} 秒")
+    lines.append(f"结果: 成功{success_cnt} / 警告{warning_cnt} / 失败{failed_cnt}")
+    if attempt is not None and max_retries is not None:
+        lines.append(f"重试: 第 {attempt}/{max_retries} 次")
+
+    lines.append('步骤明细:')
+    for idx, task in enumerate(all_steps, start=1):
+        report = normalized[task]
+        display = TASK_DISPLAY_NAME.get(task, task)
+        icon = status_icon.get(report['status'], '❔')
+        detail = f"（{report['detail']}）" if report['detail'] else ''
+        duration = report.get('duration_seconds')
+        if duration is None:
+            cost = ''
+        else:
+            cost = f" [{duration}s]"
+        lines.append(f"{idx}. {icon} {display}: {report['status']}{cost}{detail}")
+
+    issues = []
+    for task in all_steps:
+        report = normalized[task]
+        if report['status'] in ('FAILED', 'ERROR', 'WARNING'):
+            display = TASK_DISPLAY_NAME.get(task, task)
+            issues.append(f"- {display}: {report['detail'] or report['status']}")
+    if issues:
+        lines.append('异常/提示:')
+        lines.extend(issues)
+
+    if extra_message:
+        lines.append(extra_message)
+
+    return '\n'.join(lines)
+
 
 def run_all():
     """执行所有ETL任务"""
@@ -49,43 +177,57 @@ def run_all():
     logger.info("#  何方珠宝 - 数仓ETL开始执行")
     logger.info("#"*60)
     
-    results = {}
+    step_reports = {}
+
+    def update_step(task_name, status, detail='', step_start=None):
+        duration_seconds = None
+        if step_start is not None:
+            duration_seconds = int((datetime.now() - step_start).total_seconds())
+        step_reports[task_name] = {
+            'status': status,
+            'detail': _truncate_text(detail),
+            'duration_seconds': duration_seconds,
+        }
     
     # 1. 商品维度
     logger.info("\n>>> [1/7] Syncing product dimensions...")
+    step_start = datetime.now()
     try:
         from etl_dim_product import run as run_dim_product
         run_dim_product()
-        results['dim_product'] = 'SUCCESS'
+        update_step('dim_product', 'SUCCESS', '同步完成', step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['dim_product'] = f'FAILED: {error_msg[:100]}'
+        update_step('dim_product', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dim_product failed: {error_msg}")
     
     # 2. SKU维度
     logger.info("\n>>> [2/7] Syncing sku dimensions...")
+    step_start = datetime.now()
     try:
         from etl_dim_sku import run as run_dim_sku
         run_dim_sku()
-        results['dim_sku'] = 'SUCCESS'
+        update_step('dim_sku', 'SUCCESS', '同步完成', step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['dim_sku'] = f'FAILED: {error_msg[:100]}'
+        update_step('dim_sku', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dim_sku failed: {error_msg}")
 
     # 3. 店仓维度
     logger.info("\n>>> [3/7] Syncing store dimensions...")
+    step_start = datetime.now()
     try:
         from etl_dim_store import run as run_dim_store
         run_dim_store()
-        results['dim_store'] = 'SUCCESS'
+        update_step('dim_store', 'SUCCESS', '同步完成', step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['dim_store'] = f'FAILED: {error_msg[:100]}'
+        update_step('dim_store', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dim_store failed: {error_msg}")
     
     # 4. 销售数据
     logger.info("\n>>> [4/7] Syncing sales data...")
+    step_start = datetime.now()
     try:
         from etl_dws_sales import run as run_dws_sales, backfill as backfill_dws_sales
         run_dws_sales(days_back=1, include_today=True)  # 实时同步（含当天）
@@ -109,29 +251,36 @@ def run_all():
         engine.dispose()
 
         day_cnt = row[0] if row else 0
+        backfilled = False
         if day_cnt < 30:
             logger.warning(f"近30天销售数据仅覆盖{day_cnt}天，执行回补（{start_date} - {end_date}）...")
             backfill_dws_sales(start_date, end_date)
-        results['dws_sales'] = 'SUCCESS'
+            backfilled = True
+        detail = f"近30天覆盖{day_cnt}/30天"
+        if backfilled:
+            detail += f"，已回补[{start_date}-{end_date}]"
+        update_step('dws_sales', 'SUCCESS', detail, step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['dws_sales'] = f'FAILED: {error_msg[:100]}'
+        update_step('dws_sales', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_sales failed: {error_msg}")
     
     # 5. 库存数据
     logger.info("\n>>> [5/7] Syncing inventory data...")
+    step_start = datetime.now()
     try:
         from etl_dws_inventory import run as run_dws_inventory
         run_dws_inventory()
-        results['dws_inventory'] = 'SUCCESS'
+        update_step('dws_inventory', 'SUCCESS', '同步完成', step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['dws_inventory'] = f'FAILED: {error_msg[:100]}'
+        update_step('dws_inventory', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_inventory failed: {error_msg}")
 
     # 6. 达播数据就绪检查（外部项目产出）
     logger.info("\n>>> [6/7] Checking dabo data readiness...")
     dabo_ready = False
+    step_start = datetime.now()
     try:
         from config import MYSQL_CONN_STR
         engine = create_engine(MYSQL_CONN_STR)
@@ -151,16 +300,18 @@ def run_all():
         if dabo_cnt > 0:
             dabo_ready = True
             logger.info(f"达播数据就绪：今日记录 {dabo_cnt} 条（latest_date={latest_date}）")
+            update_step('dabo_ready', 'SUCCESS', f"今日记录{dabo_cnt}条，latest_date={latest_date}", step_start)
         else:
             logger.warning(f"达播数据未就绪：今日无记录（latest_date={latest_date}），将继续执行ADS计算")
-        results['dabo_ready'] = 'SUCCESS' if dabo_ready else 'WARNING: NO_DATA_TODAY'
+            update_step('dabo_ready', 'WARNING', f"今日无记录，latest_date={latest_date}", step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['dabo_ready'] = f'FAILED: {error_msg[:100]}'
+        update_step('dabo_ready', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dabo_ready check failed: {error_msg}")
     
     # 7. 库存健康度计算
     logger.info("\n>>> [7/7] Calculating inventory health...")
+    step_start = datetime.now()
     try:
         from etl_ads_health import run as run_ads_health, backfill_dabo_fields
         run_ads_health()
@@ -168,10 +319,12 @@ def run_all():
         # 达播数据就绪时，回填当日达播/自然字段（避免外部项目时序影响）
         if dabo_ready:
             backfill_dabo_fields()
-        results['ads_health'] = 'SUCCESS'
+            update_step('ads_health', 'SUCCESS', '健康度计算完成，已回填当日达播字段', step_start)
+        else:
+            update_step('ads_health', 'SUCCESS', '健康度计算完成，未回填达播字段', step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        results['ads_health'] = f'FAILED: {error_msg[:100]}'
+        update_step('ads_health', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"ads_health failed: {error_msg}")
     
     # 汇总结果
@@ -183,9 +336,15 @@ def run_all():
     logger.info("#"*60)
     
     all_success = True
-    for task, result in results.items():
-        logger.info(f"  {task}: {result}")
-        if 'fail' in result.lower() or 'error' in result.lower():
+    for task in STEP_ORDER:
+        if task not in step_reports:
+            continue
+        report = step_reports[task]
+        result_text = report['status']
+        if report['detail']:
+            result_text = f"{result_text}: {report['detail']}"
+        logger.info(f"  {task}: {result_text}")
+        if report['status'] in ('FAILED', 'ERROR'):
             all_success = False
     
     logger.info(f"\nTotal time: {duration} seconds")
@@ -195,7 +354,7 @@ def run_all():
     else:
         logger.warning("Some tasks failed, please check the logs")
     
-    return all_success, results
+    return all_success, step_reports
 
 
 if __name__ == '__main__':
@@ -324,20 +483,13 @@ if __name__ == '__main__':
 
 
     def _compose_failure_summary_from_results(results_dict):
-        # 使用从 config.py 导入的 TASK_DISPLAY_NAME
+        normalized = _normalize_step_reports(results_dict)
         parts = []
-        for task, msg in results_dict.items():
-            if not isinstance(msg, str):
+        for task, report in normalized.items():
+            status = report.get('status', 'UNKNOWN')
+            if status not in ('FAILED', 'ERROR', 'WARNING'):
                 continue
-            up = msg.upper()
-            if not (up.startswith('FAILED') or 'ERROR' in up or 'WARNING' in up):
-                continue
-
-            # 去掉 'FAILED:' 前缀（如果存在），并提取有信息量的摘要
-            content = msg
-            if msg.startswith('FAILED:'):
-                content = msg[len('FAILED:'):].strip()
-            reason = _extract_error_summary(content)
+            reason = _extract_error_summary(report.get('detail', ''))
 
             display = TASK_DISPLAY_NAME.get(task, task)
             parts.append(f"{display}：{reason}")
@@ -356,21 +508,23 @@ if __name__ == '__main__':
         try:
             if not details:
                 return True
-            # details 是 dict task->msg
-            for v in details.values():
-                if not isinstance(v, str):
+            normalized = _normalize_step_reports(details)
+            for v in normalized.values():
+                status = str(v.get('status', '')).upper()
+                if status not in ('FAILED', 'ERROR'):
                     continue
-                low = v.lower()
+                low = str(v.get('detail', '')).lower()
                 for nk in ETL_NON_RETRYABLE_ERROR_KEYWORDS:
                     if nk.lower() in low:
                         return False
 
             # 如果定义了可重试关键字列表，则必须匹配其中至少一项才重试
             if ETL_RETRYABLE_ERROR_KEYWORDS:
-                for v in details.values():
-                    if not isinstance(v, str):
+                for v in normalized.values():
+                    status = str(v.get('status', '')).upper()
+                    if status not in ('FAILED', 'ERROR'):
                         continue
-                    low = v.lower()
+                    low = str(v.get('detail', '')).lower()
                     for rk in ETL_RETRYABLE_ERROR_KEYWORDS:
                         if rk.lower() in low:
                             return True
@@ -385,6 +539,7 @@ if __name__ == '__main__':
         attempt = 0
         while attempt < max_retries:
             attempt += 1
+            run_started_at = datetime.now()
             try:
                 logger.info(f'ETL 主任务开始（尝试 {attempt}/{max_retries}）')
                 run_result = run_func()
@@ -397,6 +552,16 @@ if __name__ == '__main__':
                     details = None
 
                 if ok:
+                    ended_at = datetime.now()
+                    summary_content = _compose_run_summary_message(
+                        details,
+                        overall_status='SUCCESS',
+                        started_at=run_started_at,
+                        ended_at=ended_at,
+                        attempt=attempt,
+                        max_retries=max_retries,
+                    )
+                    send_wechat_alert(WECHAT_WEBHOOK, summary_content)
                     return 0
                 else:
                     logger.warning(f'ETL finished with partial failures on attempt {attempt}.')
@@ -407,19 +572,32 @@ if __name__ == '__main__':
 
                     if not should_retry:
                         # 发现确定性不可重试错误，立即告警并返回
-                        summary = _compose_failure_summary_from_results(details) if details else '部分任务失败，详情见日志。'
-                        content = f"❌ ETL 遇到不可重试的错误：\n{summary}"
-                        send_wechat_alert(WECHAT_WEBHOOK, content)
+                        ended_at = datetime.now()
+                        summary_content = _compose_run_summary_message(
+                            details,
+                            overall_status='FAILED',
+                            started_at=run_started_at,
+                            ended_at=ended_at,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            extra_message='失败原因：命中不可重试错误，已停止重试。',
+                        )
+                        send_wechat_alert(WECHAT_WEBHOOK, summary_content)
                         return 2
 
                     # 到达最大重试次数则发送告警
                     if attempt >= max_retries:
-                        if details:
-                            summary = _compose_failure_summary_from_results(details)
-                            content = f"❌ ETL 部分任务失败：\n{summary}"
-                        else:
-                            content = '❌ ETL 部分任务失败：请检查日志以获取详情。'
-                        send_wechat_alert(WECHAT_WEBHOOK, content)
+                        ended_at = datetime.now()
+                        summary_content = _compose_run_summary_message(
+                            details,
+                            overall_status='FAILED',
+                            started_at=run_started_at,
+                            ended_at=ended_at,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            extra_message='已达到最大重试次数。',
+                        )
+                        send_wechat_alert(WECHAT_WEBHOOK, summary_content)
                         return 2
 
                     logger.info(f'等待 {sleep_seconds} 秒后重试...')
@@ -429,8 +607,23 @@ if __name__ == '__main__':
                 logger.error(f'ETL 主任务抛出未捕获异常（尝试 {attempt}/{max_retries}）: {tb}')
                 summary_line = _extract_error_summary(tb)
                 if attempt >= max_retries:
-                    content = f"❌ ETL 遇到严重错误：{summary_line}"
-                    send_wechat_alert(WECHAT_WEBHOOK, content)
+                    ended_at = datetime.now()
+                    synthetic_report = {
+                        'runner_exception': {
+                            'status': 'FAILED',
+                            'detail': summary_line,
+                            'duration_seconds': int((ended_at - run_started_at).total_seconds()),
+                        }
+                    }
+                    summary_content = _compose_run_summary_message(
+                        synthetic_report,
+                        overall_status='ERROR',
+                        started_at=run_started_at,
+                        ended_at=ended_at,
+                        attempt=attempt,
+                        max_retries=max_retries,
+                    )
+                    send_wechat_alert(WECHAT_WEBHOOK, summary_content)
                     return 1
                 else:
                     logger.info(f'等待 {sleep_seconds} 秒后重试...')
@@ -441,13 +634,17 @@ if __name__ == '__main__':
     conn_test_flag = ('--conn-test' in sys.argv) or (os.getenv('ETL_CONN_TEST', '0') == '1')
     # 支持通过环境变量临时覆盖最大重试次数（便于测试）
     try:
-        MAX_RETRIES = int(os.getenv('ETL_MAX_RETRIES', '3'))
+        MAX_RETRIES = int(os.getenv('ETL_MAX_RETRIES', str(ETL_DEFAULT_MAX_RETRIES)))
     except Exception:
-        MAX_RETRIES = 3
+        MAX_RETRIES = ETL_DEFAULT_MAX_RETRIES
+    try:
+        RETRY_SLEEP = int(os.getenv('ETL_RETRY_SLEEP', str(ETL_DEFAULT_RETRY_SLEEP)))
+    except Exception:
+        RETRY_SLEEP = ETL_DEFAULT_RETRY_SLEEP
     if conn_test_flag:
         logger.info('运行模式：仅连接测试（--conn-test / ETL_CONN_TEST=1）')
         runner = run_conn_test
     else:
         runner = run_all
 
-    sys.exit(main_with_retries(runner, max_retries=MAX_RETRIES))
+    sys.exit(main_with_retries(runner, max_retries=MAX_RETRIES, sleep_seconds=RETRY_SLEEP))

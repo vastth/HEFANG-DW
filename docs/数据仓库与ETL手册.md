@@ -406,12 +406,14 @@ SKU信息 ← dim_sku
 ```batch
 @echo off
 cd /d C:\Users\tianhao\PycharmProjects\hefang_dw
-python scheduled_etl.py
+python run_scheduled_etl.bat
 ```
 
 **方式二：run_scheduled_etl.bat**
 - 时间：每天凌晨3:00
 - 日志：logs/etl_YYYYMMDD.log
+- 入口链路：`run_scheduled_etl.bat` -> `scheduled_etl.py` -> `run_etl.py`
+- 说明：`run_etl.py` 为统一执行入口，负责重试与企业微信摘要发送（成功/失败都会发送）。
 
 ---
 
@@ -419,10 +421,10 @@ python scheduled_etl.py
 
 | 异常 | 处理 |
 |------|------|
-| Oracle连接失败 | 重试3次，失败则告警 |
+| Oracle连接失败 | 按重试策略执行，达到上限或不可重试时发送企业微信摘要 |
 | MySQL写入失败 | 回滚，记录日志 |
-| 数据量异常（差>10%） | 告警，人工确认 |
-| ETL超时（>1小时） | 强制终止，告警 |
+| 数据量异常（差>10%） | 在验证环节提示，人工确认 |
+| ETL执行完成（成功/失败） | 发送统一摘要（步骤状态、耗时、关键指标） |
 
 ---
 
@@ -430,6 +432,7 @@ python scheduled_etl.py
 
 **每日检查项：**
 - [ ] ETL是否成功完成
+- [ ] 企业微信是否收到当日执行摘要（成功或失败）
 - [ ] 各表记录数是否正常
 - [ ] 昨日销售额是否有数据
 - [ ] 库存快照是否生成
@@ -483,7 +486,7 @@ GROUP BY date_id;
 tail -f logs/etl_20260120.log
 
 # 手动重跑
-python scheduled_etl.py
+python run_etl.py
 ```
 
 **问题2：数据量异常**
@@ -529,14 +532,12 @@ MYSQL_CONFIG = {
     'charset': 'utf8mb4'
 }
 
-# ETL配置
-ETL_CONFIG = {
-    'days_back': 1,  # 回溯天数
-    'max_retries': 3,  # 最大重试次数
-    'timeout': 3600,  # 超时时间（秒）
-}
+# ETL重试配置（环境变量）
+# 说明：run_etl.py 会优先读取环境变量，未设置时回落到 config.py 默认值
+ETL_MAX_RETRIES = 3   # 最大重试次数
+ETL_RETRY_SLEEP = 60  # 重试间隔秒数
 ```
 
 ---
 
-*文档版本: 2.1 | 更新日期: 2026-02-04 *
+*文档版本: 2.2 | 更新日期: 2026-02-24 *
