@@ -48,7 +48,14 @@ def run_etl_with_error_handling():
         
         # 统一走 run_etl.py 入口（内含重试与企业微信摘要）
         run_etl_file = os.path.join(PROJECT_DIR, 'run_etl.py')
-        result = subprocess.run([sys.executable, run_etl_file], cwd=PROJECT_DIR)
+        # 将 run_etl 子进程的 stdout/stderr 重定向到同一日志文件，保证调度日志包含子进程输出
+        with open(log_file, 'ab') as fh:
+            # 写入一条分隔，方便查看
+            fh.write(("\n--- Subprocess run_etl output start ---\n").encode('utf-8'))
+            fh.flush()
+            result = subprocess.run([sys.executable, run_etl_file], cwd=PROJECT_DIR, stdout=fh, stderr=fh)
+            fh.write(("\n--- Subprocess run_etl output end ---\n").encode('utf-8'))
+            fh.flush()
 
         if result.returncode == 0:
             logger.info("✅ ETL执行成功")
