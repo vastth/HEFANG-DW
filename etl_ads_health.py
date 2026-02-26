@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 import logging
 
-from config import MYSQL_CONN_STR
+from config import MAIN_CATEGORY_IDS, MYSQL_CONN_STR
 
 # 配置日志
 logging.basicConfig(
@@ -91,6 +91,8 @@ def calculate_inventory_health():
     date_30_ago_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     date_7_ago_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     
+    main_category_ids = ",".join(str(x) for x in MAIN_CATEGORY_IDS)
+
     # 优化后的大SQL：一次性计算所有指标
     sql = f"""
      INSERT INTO ads_inventory_health 
@@ -287,7 +289,7 @@ def calculate_inventory_health():
     ) dabo ON sku.sku_barcode COLLATE utf8mb4_unicode_ci = dabo.sku_barcode
     
     WHERE p.is_main_product = 'Y'
-        AND p.category_id IN (134,142,139,138,141,143,133,136,140,137,144,145)
+        AND p.category_id IN ({main_category_ids})
         -- ⚠️ 注意：现在以库存表为主，自动只包含dws_inventory_daily中有记录的商品
         --         这与Oracle SQL逻辑完全一致（FROM stock st LEFT JOIN sales sa）
     """

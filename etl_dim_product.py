@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text
 from datetime import datetime
 import logging
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR, MAIN_CATEGORY_IDS
 
 # 配置日志
 logging.basicConfig(
@@ -25,7 +25,9 @@ def extract_from_oracle():
     """从Oracle抽取商品数据"""
 
     # 使用实际存在的字段名（不使用行尾反斜杠，保持 SQL 可读）
-    sql = """
+    main_category_ids = ",".join(str(x) for x in MAIN_CATEGORY_IDS)
+
+    sql = f"""
     SELECT
         p.ID AS product_id,
         p.NAME AS product_code,
@@ -41,7 +43,7 @@ def extract_from_oracle():
         p.PRICELIST AS price_list,
         p.FABELEMENT AS material,
         p.PRECOST AS price_cost,
-        CASE WHEN p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145) THEN 'Y' ELSE 'N' END AS is_main_product,
+        CASE WHEN p.M_DIM4_ID IN ({main_category_ids}) THEN 'Y' ELSE 'N' END AS is_main_product,
         p.ISACTIVE AS is_active,
         p.CREATIONDATE AS created_at,
         asi.VALUE1 AS color_attr,

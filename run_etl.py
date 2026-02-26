@@ -100,6 +100,71 @@ def _normalize_step_reports(step_reports):
     return normalized
 
 
+def _extract_error_summary(text):
+    """从异常文本或 traceback 中提取最有信息量的一行摘要。
+
+    策略：
+    1) 倒序查找包含关键字的行（如 ORA-, Access denied, OperationalError, timeout, exception 等）
+    2) 若无匹配，倒序查找首个非空且不是帮助链接/traceback 文件行的行
+    3) 返回该行的简短摘要
+    """
+    if not text:
+        return ''
+    import re
+
+    keywords = [
+        'ORA-', 'ORA_', 'Access denied', 'invalid username', 'OperationalError',
+        'timeout', 'timed out', 'Connection refused', 'authentication failed', 'Traceback'
+    ]
+    # 拆分并去除空行
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # 优先过滤掉明显无用的帮助/URL/文件定位行
+    def is_noise(ln):
+        low = ln.lower()
+        if low.startswith('help:'):
+            return True
+        if 'background on this error' in low:
+            return True
+        if ln.startswith('File "'):
+            return True
+        if ln.startswith('http://') or ln.startswith('https://'):
+            return True
+        return False
+
+    useful_lines = [ln for ln in lines if not is_noise(ln)]
+
+    # 0) 特殊优先：寻找 ORA-12345 类的错误码行
+    ora_match = re.search(r'(ORA-\d{5,})', text, flags=re.IGNORECASE)
+    if ora_match:
+        # 返回包含 ORA- 的整行（从 useful_lines 或原始 lines 中寻找）
+        for ln in useful_lines:
+            if 'ora-' in ln.lower():
+                return ln
+        for ln in lines:
+            if 'ora-' in ln.lower():
+                return ln
+
+    # 1) 在有用行中倒序匹配关键字
+    for ln in reversed(useful_lines):
+        for kw in keywords:
+            if kw.lower() in ln.lower():
+                return ln
+
+    # 2) 若没有有用行（或者未命中关键字），尝试在原始行中匹配关键字
+    for ln in reversed(lines):
+        for kw in keywords:
+            if kw.lower() in ln.lower():
+                return ln
+
+    # 3) 若仍无匹配，返回第一个非噪声的有意义行
+    if useful_lines:
+        return useful_lines[-1]
+
+    # 4) 回退到原始最后一行或全文简短化
+    return lines[-1] if lines else text.strip()
+
+
 def _compose_run_summary_message(step_reports, overall_status, started_at, ended_at, attempt=None, max_retries=None, extra_message=None):
     normalized = _normalize_step_reports(step_reports)
     all_steps = [k for k in STEP_ORDER if k in normalized]
@@ -167,6 +232,74 @@ def _compose_run_summary_message(step_reports, overall_status, started_at, ended
         lines.append(extra_message)
 
     return '\n'.join(lines)
+
+
+def _compose_failure_summary_from_results(results_dict):
+    normalized = _normalize_step_reports(results_dict)
+    parts = []
+    for task, report in normalized.items():
+        status = report.get('status', 'UNKNOWN')
+        if status not in ('FAILED', 'ERROR', 'WARNING'):
+            continue
+        reason = _extract_error_summary(report.get('detail', ''))
+
+        display = TASK_DISPLAY_NAME.get(task, task)
+        parts.append(f"{display}：{reason}")
+
+    return '\n'.join(parts) if parts else '部分任务失败，请查看日志获取更多信息。'
+
+
+def run_conn_test():
+    """仅测试 Oracle 与 MySQL 连接，不做任何写操作，返回 (ok, details)
+
+    details: dict, e.g. {'oracle': 'SUCCESS' or 'FAILED: ...', 'mysql': 'SUCCESS' or 'FAILED: ...'}
+    """
+    ok = True
+    details = {}
+    # Oracle
+    try:
+        from config import ORACLE_CONFIG, ORACLE_DSN
+        logger.info('ConnTest: testing Oracle connection...')
+        try:
+            import oracledb
+            conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
+            conn.close()
+            logger.info('ConnTest: Oracle OK')
+            details['oracle'] = 'SUCCESS'
+        except Exception as e:
+            err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+            logger.error(f'ConnTest: Oracle connection failed: {err}')
+            details['oracle'] = f'FAILED: {_extract_error_summary(err)}'
+            ok = False
+    except Exception as e:
+        err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+        logger.error(f'ConnTest: Oracle test skipped (config error): {err}')
+        details['oracle'] = f'FAILED: {err}'
+        ok = False
+
+    # MySQL
+    try:
+        from config import MYSQL_CONN_STR
+        logger.info('ConnTest: testing MySQL connection...')
+        try:
+            engine = create_engine(MYSQL_CONN_STR)
+            with engine.connect() as conn:
+                conn.execute(text('SELECT 1'))
+            engine.dispose()
+            logger.info('ConnTest: MySQL OK')
+            details['mysql'] = 'SUCCESS'
+        except Exception as e:
+            err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+            logger.error(f'ConnTest: MySQL connection failed: {err}')
+            details['mysql'] = f'FAILED: {_extract_error_summary(err)}'
+            ok = False
+    except Exception as e:
+        err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+        logger.error(f'ConnTest: MySQL test skipped (config error): {err}')
+        details['mysql'] = f'FAILED: {err}'
+        ok = False
+
+    return ok, details
 
 
 def run_all():
@@ -357,294 +490,171 @@ def run_all():
     return all_success, step_reports
 
 
-if __name__ == '__main__':
-    # 从配置中读取企业微信 webhook（可在 config.py 中配置变量 `WECHAT_WEBHOOK`）
+def _should_retry_based_on_details(details):
+    """根据结果详情决定是否继续重试。
+
+    逻辑：
+    - 若任一失败消息包含 ETL_NON_RETRYABLE_ERROR_KEYWORDS 中的关键字，认为不可重试。
+    - 否则，如果 ETL_RETRYABLE_ERROR_KEYWORDS 非空，则只有当至少匹配一项时才重试。
+    - 否则（没有非重试关键字，且未指定白名单），默认允许重试。
+    """
     try:
-        from config import WECHAT_WEBHOOK
-    except Exception:
-        WECHAT_WEBHOOK = None
-
-    # send_wechat_alert 已移至 alerts.py
-
-    # 仅做连接测试（不写入）
-    def run_conn_test():
-        """仅测试 Oracle 与 MySQL 连接，不做任何写操作，返回 (ok, details)
-
-        details: dict, e.g. {'oracle': 'SUCCESS' or 'FAILED: ...', 'mysql': 'SUCCESS' or 'FAILED: ...'}
-        """
-        ok = True
-        details = {}
-        # Oracle
-        try:
-            from config import ORACLE_CONFIG, ORACLE_DSN
-            logger.info('ConnTest: testing Oracle connection...')
-            try:
-                import oracledb
-                conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
-                conn.close()
-                logger.info('ConnTest: Oracle OK')
-                details['oracle'] = 'SUCCESS'
-            except Exception as e:
-                err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-                logger.error(f'ConnTest: Oracle connection failed: {err}')
-                details['oracle'] = f'FAILED: {_extract_error_summary(err)}'
-                ok = False
-        except Exception as e:
-            err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-            logger.error(f'ConnTest: Oracle test skipped (config error): {err}')
-            details['oracle'] = f'FAILED: {err}'
-            ok = False
-
-        # MySQL
-        try:
-            from config import MYSQL_CONN_STR
-            logger.info('ConnTest: testing MySQL connection...')
-            try:
-                engine = create_engine(MYSQL_CONN_STR)
-                with engine.connect() as conn:
-                    conn.execute(text('SELECT 1'))
-                engine.dispose()
-                logger.info('ConnTest: MySQL OK')
-                details['mysql'] = 'SUCCESS'
-            except Exception as e:
-                err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-                logger.error(f'ConnTest: MySQL connection failed: {err}')
-                details['mysql'] = f'FAILED: {_extract_error_summary(err)}'
-                ok = False
-        except Exception as e:
-            err = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-            logger.error(f'ConnTest: MySQL test skipped (config error): {err}')
-            details['mysql'] = f'FAILED: {err}'
-            ok = False
-
-        return ok, details
-
-    # 包装入口：支持重试和异常告警；可传入运行函数以复用重试逻辑
-    def _extract_error_summary(text):
-        """从异常文本或 traceback 中提取最有信息量的一行摘要。
-
-        策略：
-        1) 倒序查找包含关键字的行（如 ORA-, Access denied, OperationalError, timeout, exception 等）
-        2) 若无匹配，倒序查找首个非空且不是帮助链接/traceback 文件行的行
-        3) 返回该行的简短摘要
-        """
-        if not text:
-            return ''
-        import re
-
-        keywords = ['ORA-', 'ORA_', 'Access denied', 'invalid username', 'OperationalError', 'timeout', 'timed out', 'Connection refused', 'authentication failed', 'Traceback']
-        # 拆分并去除空行
-        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-
-        # 优先过滤掉明显无用的帮助/URL/文件定位行
-        def is_noise(ln):
-            low = ln.lower()
-            if low.startswith('help:'):
-                return True
-            if 'background on this error' in low:
-                return True
-            if ln.startswith('File "'):
-                return True
-            if ln.startswith('http://') or ln.startswith('https://'):
-                return True
-            return False
-
-        useful_lines = [ln for ln in lines if not is_noise(ln)]
-
-        # 0) 特殊优先：寻找 ORA-12345 类的错误码行
-        ora_match = re.search(r'(ORA-\d{5,})', text, flags=re.IGNORECASE)
-        if ora_match:
-            # 返回包含 ORA- 的整行（从 useful_lines 或原始 lines 中寻找）
-            for ln in useful_lines:
-                if 'ora-' in ln.lower():
-                    return ln
-            for ln in lines:
-                if 'ora-' in ln.lower():
-                    return ln
-
-        # 1) 在有用行中倒序匹配关键字
-        for ln in reversed(useful_lines):
-            for kw in keywords:
-                if kw.lower() in ln.lower():
-                    return ln
-
-        # 2) 若没有有用行（或者未命中关键字），尝试在原始行中匹配关键字
-        for ln in reversed(lines):
-            for kw in keywords:
-                if kw.lower() in ln.lower():
-                    return ln
-
-        # 3) 若仍无匹配，返回第一个非噪声的有意义行
-        if useful_lines:
-            return useful_lines[-1]
-
-        # 4) 回退到原始最后一行或全文简短化
-        return lines[-1] if lines else text.strip()
-
-
-    def _compose_failure_summary_from_results(results_dict):
-        normalized = _normalize_step_reports(results_dict)
-        parts = []
-        for task, report in normalized.items():
-            status = report.get('status', 'UNKNOWN')
-            if status not in ('FAILED', 'ERROR', 'WARNING'):
+        if not details:
+            return True
+        normalized = _normalize_step_reports(details)
+        for v in normalized.values():
+            status = str(v.get('status', '')).upper()
+            if status not in ('FAILED', 'ERROR'):
                 continue
-            reason = _extract_error_summary(report.get('detail', ''))
+            low = str(v.get('detail', '')).lower()
+            for nk in ETL_NON_RETRYABLE_ERROR_KEYWORDS:
+                if nk.lower() in low:
+                    return False
 
-            display = TASK_DISPLAY_NAME.get(task, task)
-            parts.append(f"{display}：{reason}")
-
-        return '\n'.join(parts) if parts else '部分任务失败，请查看日志获取更多信息。'
-
-
-    def _should_retry_based_on_details(details):
-        """根据结果详情决定是否继续重试。
-
-        逻辑：
-        - 若任一失败消息包含 ETL_NON_RETRYABLE_ERROR_KEYWORDS 中的关键字，认为不可重试。
-        - 否则，如果 ETL_RETRYABLE_ERROR_KEYWORDS 非空，则只有当至少匹配一项时才重试。
-        - 否则（没有非重试关键字，且未指定白名单），默认允许重试。
-        """
-        try:
-            if not details:
-                return True
-            normalized = _normalize_step_reports(details)
+        # 如果定义了可重试关键字列表，则必须匹配其中至少一项才重试
+        if ETL_RETRYABLE_ERROR_KEYWORDS:
             for v in normalized.values():
                 status = str(v.get('status', '')).upper()
                 if status not in ('FAILED', 'ERROR'):
                     continue
                 low = str(v.get('detail', '')).lower()
-                for nk in ETL_NON_RETRYABLE_ERROR_KEYWORDS:
-                    if nk.lower() in low:
-                        return False
+                for rk in ETL_RETRYABLE_ERROR_KEYWORDS:
+                    if rk.lower() in low:
+                        return True
+            return False
 
-            # 如果定义了可重试关键字列表，则必须匹配其中至少一项才重试
-            if ETL_RETRYABLE_ERROR_KEYWORDS:
-                for v in normalized.values():
-                    status = str(v.get('status', '')).upper()
-                    if status not in ('FAILED', 'ERROR'):
-                        continue
-                    low = str(v.get('detail', '')).lower()
-                    for rk in ETL_RETRYABLE_ERROR_KEYWORDS:
-                        if rk.lower() in low:
-                            return True
-                return False
+        return True
+    except Exception:
+        return True
 
-            return True
+
+def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=None):
+    if webhook_url is None:
+        try:
+            from config import WECHAT_WEBHOOK as webhook_url
         except Exception:
-            return True
+            webhook_url = None
 
+    attempt = 0
+    while attempt < max_retries:
+        attempt += 1
+        run_started_at = datetime.now()
+        try:
+            logger.info(f'ETL 主任务开始（尝试 {attempt}/{max_retries}）')
+            run_result = run_func()
 
-    def main_with_retries(run_func, max_retries=3, sleep_seconds=60):
-        attempt = 0
-        while attempt < max_retries:
-            attempt += 1
-            run_started_at = datetime.now()
-            try:
-                logger.info(f'ETL 主任务开始（尝试 {attempt}/{max_retries}）')
-                run_result = run_func()
+            # run_func 可能返回 bool 或 (bool, details)
+            if isinstance(run_result, tuple) and len(run_result) == 2:
+                ok, details = run_result
+            else:
+                ok = bool(run_result)
+                details = None
 
-                # run_func 可能返回 bool 或 (bool, details)
-                if isinstance(run_result, tuple) and len(run_result) == 2:
-                    ok, details = run_result
-                else:
-                    ok = bool(run_result)
-                    details = None
+            if ok:
+                ended_at = datetime.now()
+                summary_content = _compose_run_summary_message(
+                    details,
+                    overall_status='SUCCESS',
+                    started_at=run_started_at,
+                    ended_at=ended_at,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                )
+                send_wechat_alert(webhook_url, summary_content)
+                return 0
+            else:
+                logger.warning(f'ETL finished with partial failures on attempt {attempt}.')
+                # 若有详细 results，判断是否应该继续重试
+                should_retry = True
+                if details:
+                    should_retry = _should_retry_based_on_details(details)
 
-                if ok:
+                if not should_retry:
+                    # 发现确定性不可重试错误，立即告警并返回
                     ended_at = datetime.now()
                     summary_content = _compose_run_summary_message(
                         details,
-                        overall_status='SUCCESS',
+                        overall_status='FAILED',
                         started_at=run_started_at,
                         ended_at=ended_at,
                         attempt=attempt,
                         max_retries=max_retries,
+                        extra_message='失败原因：命中不可重试错误，已停止重试。',
                     )
-                    send_wechat_alert(WECHAT_WEBHOOK, summary_content)
-                    return 0
-                else:
-                    logger.warning(f'ETL finished with partial failures on attempt {attempt}.')
-                    # 若有详细 results，判断是否应该继续重试
-                    should_retry = True
-                    if details:
-                        should_retry = _should_retry_based_on_details(details)
+                    send_wechat_alert(webhook_url, summary_content)
+                    return 2
 
-                    if not should_retry:
-                        # 发现确定性不可重试错误，立即告警并返回
-                        ended_at = datetime.now()
-                        summary_content = _compose_run_summary_message(
-                            details,
-                            overall_status='FAILED',
-                            started_at=run_started_at,
-                            ended_at=ended_at,
-                            attempt=attempt,
-                            max_retries=max_retries,
-                            extra_message='失败原因：命中不可重试错误，已停止重试。',
-                        )
-                        send_wechat_alert(WECHAT_WEBHOOK, summary_content)
-                        return 2
-
-                    # 到达最大重试次数则发送告警
-                    if attempt >= max_retries:
-                        ended_at = datetime.now()
-                        summary_content = _compose_run_summary_message(
-                            details,
-                            overall_status='FAILED',
-                            started_at=run_started_at,
-                            ended_at=ended_at,
-                            attempt=attempt,
-                            max_retries=max_retries,
-                            extra_message='已达到最大重试次数。',
-                        )
-                        send_wechat_alert(WECHAT_WEBHOOK, summary_content)
-                        return 2
-
-                    logger.info(f'等待 {sleep_seconds} 秒后重试...')
-                    time.sleep(sleep_seconds)
-            except Exception:
-                tb = traceback.format_exc()
-                logger.error(f'ETL 主任务抛出未捕获异常（尝试 {attempt}/{max_retries}）: {tb}')
-                summary_line = _extract_error_summary(tb)
+                # 到达最大重试次数则发送告警
                 if attempt >= max_retries:
                     ended_at = datetime.now()
-                    synthetic_report = {
-                        'runner_exception': {
-                            'status': 'FAILED',
-                            'detail': summary_line,
-                            'duration_seconds': int((ended_at - run_started_at).total_seconds()),
-                        }
-                    }
                     summary_content = _compose_run_summary_message(
-                        synthetic_report,
-                        overall_status='ERROR',
+                        details,
+                        overall_status='FAILED',
                         started_at=run_started_at,
                         ended_at=ended_at,
                         attempt=attempt,
                         max_retries=max_retries,
+                        extra_message='已达到最大重试次数。',
                     )
-                    send_wechat_alert(WECHAT_WEBHOOK, summary_content)
-                    return 1
-                else:
-                    logger.info(f'等待 {sleep_seconds} 秒后重试...')
-                    time.sleep(sleep_seconds)
-        return 1
+                    send_wechat_alert(webhook_url, summary_content)
+                    return 2
 
+                logger.info(f'等待 {sleep_seconds} 秒后重试...')
+                time.sleep(sleep_seconds)
+        except Exception:
+            tb = traceback.format_exc()
+            logger.error(f'ETL 主任务抛出未捕获异常（尝试 {attempt}/{max_retries}）: {tb}')
+            summary_line = _extract_error_summary(tb)
+            if attempt >= max_retries:
+                ended_at = datetime.now()
+                synthetic_report = {
+                    'runner_exception': {
+                        'status': 'FAILED',
+                        'detail': summary_line,
+                        'duration_seconds': int((ended_at - run_started_at).total_seconds()),
+                    }
+                }
+                summary_content = _compose_run_summary_message(
+                    synthetic_report,
+                    overall_status='ERROR',
+                    started_at=run_started_at,
+                    ended_at=ended_at,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                )
+                send_wechat_alert(webhook_url, summary_content)
+                return 1
+            else:
+                logger.info(f'等待 {sleep_seconds} 秒后重试...')
+                time.sleep(sleep_seconds)
+    return 1
+
+
+def run_main(conn_test_flag=None, max_retries=None, retry_sleep=None):
     # 解析是否启用连接测试模式（命令行或环境变量）
-    conn_test_flag = ('--conn-test' in sys.argv) or (os.getenv('ETL_CONN_TEST', '0') == '1')
+    if conn_test_flag is None:
+        conn_test_flag = ('--conn-test' in sys.argv) or (os.getenv('ETL_CONN_TEST', '0') == '1')
+
     # 支持通过环境变量临时覆盖最大重试次数（便于测试）
-    try:
-        MAX_RETRIES = int(os.getenv('ETL_MAX_RETRIES', str(ETL_DEFAULT_MAX_RETRIES)))
-    except Exception:
-        MAX_RETRIES = ETL_DEFAULT_MAX_RETRIES
-    try:
-        RETRY_SLEEP = int(os.getenv('ETL_RETRY_SLEEP', str(ETL_DEFAULT_RETRY_SLEEP)))
-    except Exception:
-        RETRY_SLEEP = ETL_DEFAULT_RETRY_SLEEP
+    if max_retries is None:
+        try:
+            max_retries = int(os.getenv('ETL_MAX_RETRIES', str(ETL_DEFAULT_MAX_RETRIES)))
+        except Exception:
+            max_retries = ETL_DEFAULT_MAX_RETRIES
+    if retry_sleep is None:
+        try:
+            retry_sleep = int(os.getenv('ETL_RETRY_SLEEP', str(ETL_DEFAULT_RETRY_SLEEP)))
+        except Exception:
+            retry_sleep = ETL_DEFAULT_RETRY_SLEEP
+
     if conn_test_flag:
         logger.info('运行模式：仅连接测试（--conn-test / ETL_CONN_TEST=1）')
         runner = run_conn_test
     else:
         runner = run_all
 
-    sys.exit(main_with_retries(runner, max_retries=MAX_RETRIES, sleep_seconds=RETRY_SLEEP))
+    return main_with_retries(runner, max_retries=max_retries, sleep_seconds=retry_sleep)
+
+
+if __name__ == '__main__':
+    sys.exit(run_main())

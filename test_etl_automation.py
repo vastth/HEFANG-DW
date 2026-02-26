@@ -6,7 +6,7 @@ ETL自动化测试与验证脚本
 
 import pymysql
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import MYSQL_CONFIG, ORACLE_CONFIG, ORACLE_DSN, ORACLE_VERIFY_QUERIES
 
 # 配置UTF-8输出
@@ -193,7 +193,7 @@ def test_dws_sales():
     print("="*80)
     
     today = int(datetime.now().strftime('%Y%m%d'))
-    date_30_ago = int(datetime.now().strftime('%Y%m%d')) - 30  # 简化计算
+    date_30_ago = int((datetime.now() - timedelta(days=30)).strftime('%Y%m%d'))
     
     # 近30天销售记录数
     cursor.execute(f"""
