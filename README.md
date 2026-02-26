@@ -74,11 +74,13 @@
 | 数据层 | 名称 | 表前缀 | 说明 | 更新频率 |
 |--------|------|--------|------|----------|
 | **ODS** | 原始层 | `ods_*` | 1:1复制源表（可选） | 视需要全量 |
-|  注：零售明细存在两条写入链路（线上/线下），增量同步采用“双水位”策略：
-|        |      |        | - `MODIFIEDDATE`：线上通道； - `SETTIME`：线下门店通道（DOCNO/ORDERNO 前缀含 `RT`） | |
 | **DIM** | 维度层 | `dim_*` | 商品、店仓等主数据 | 每日全量 |
 | **DWS** | 汇总层 | `dws_*` | 日粒度销售、库存明细 | 销售增量/库存快照 |
 | **ADS** | 应用层 | `ads_*` | 业务主题宽表（库存健康度等） | 每日全量 |
+
+注：零售明细存在两条写入链路（线上/线下），增量同步采用“双水位”策略：
+- `MODIFIEDDATE`：线上通道
+- `SETTIME`：线下门店通道（`DOCNO/ORDERNO` 前缀含 `RT`）
 
 ---
 
@@ -108,6 +110,8 @@ hefang_dw/
 │   ├── test_connection.py       # 数据库连接测试工具
 │   ├── check_data.py            # 数据质量检查脚本
 │   ├── check_dws_inventory.py   # 库存专项检查
+│   ├── check_ods_incremental.py # ODS对账（主表/明细）
+│   ├── check_ods_retailitem_quality.py # ODS明细质量对账（双通道拆分）
 │   └── export_ads.py            # ADS数据导出
 │
 ├── notebooks/                   # 数据探索Jupyter笔记本（非运行链路）
@@ -280,6 +284,9 @@ python run_etl.py
 python run_ods.py
 ```
 
+说明：`run_ods.py` 会在抽取完成后自动执行 ODS 质量校验，并将结果写入 `logs/ods_qc_*.log`。
+说明：质量校验默认使用抽取完成时刻作为 `--as-of` 截止时间，避免时间漂移。
+
 ### 4.2 ODS增量同步（推荐）
 
 ```bash
@@ -292,6 +299,11 @@ python run_ods.py --full
 # 调整回刷天数或窗口大小
 python run_ods.py --backfill-days 14 --window-days 1
 ```
+
+可选参数：
+- 跳过质检：`--skip-qc`
+- 质检全量：`--qc-all`
+- 质检回看天数：`--qc-days 7`
 
 ### 5. 验证数据
 
@@ -482,6 +494,16 @@ python check_data.py
 
 # 库存专项检查
 python check_dws_inventory.py
+
+# ODS对账（主表/明细）
+python tools/check_ods_incremental.py --days 7
+
+# ODS明细质量对账（双通道拆分）
+python tools/check_ods_retailitem_quality.py --days 7
+
+# 使用截止时间避免时间漂移
+python tools/check_ods_incremental.py --days 7 --as-of "2026-02-26 17:11:52"
+python tools/check_ods_retailitem_quality.py --days 7 --as-of "2026-02-26 17:11:52"
 ```
 
 ### 导出应用层数据

@@ -59,6 +59,8 @@ def _run_quality_checks(logger, qc_days, qc_all, qc_start_date, qc_end_date, as_
         retailitem_cmd.extend(["--days", str(qc_days)])
         if qc_start_date and qc_end_date:
             retailitem_cmd.extend(["--start-date", str(qc_start_date), "--end-date", str(qc_end_date)])
+    if as_of:
+        retailitem_cmd.extend(["--as-of", as_of])
 
     logger.info("开始执行质量校验: ods_m_retail / ods_m_retailitem")
 
