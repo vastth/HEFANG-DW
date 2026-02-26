@@ -320,11 +320,9 @@
 | 4 | m_productalias_id | bigint | YES |  |  |
 | 5 | qty | decimal(18,4) | YES |  |  |
 | 6 | qtyvalid | decimal(18,4) | YES |  |  |
-| 7 | qtyoccupy | decimal(18,4) | YES |  |  |
-| 8 | pricelist | decimal(18,2) | YES |  |  |
-| 9 | isactive | char(1) | YES |  |  |
-| 10 | etl_batch_id | varchar(32) | NO |  |  |
-| 11 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 7 | isactive | char(1) | YES |  |  |
+| 8 | etl_batch_id | varchar(32) | NO |  |  |
+| 9 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP |  |
 
 ## ods_m_retail
 - 描述: ODS-零售单主表
@@ -332,17 +330,17 @@
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | id | bigint | NO |  | 零售单ID |
-| 2 | docno | varchar(40) | YES |  |  |
-| 3 | billdate | int | YES |  | YYYYMMDD |
-| 4 | c_store_id | bigint | YES |  |  |
-| 5 | tot_amt_actual | decimal(18,2) | YES |  |  |
-| 6 | tot_amt_list | decimal(18,2) | YES |  |  |
-| 7 | tot_qty | decimal(18,4) | YES |  |  |
-| 8 | status | int | YES |  |  |
-| 9 | isactive | char(1) | YES |  |  |
-| 10 | created | datetime | YES |  |  |
-| 11 | etl_batch_id | bigint | NO | 0 |  |
-| 12 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 2 | docno | varchar(40) | YES |  | 订单编号 |
+| 3 | billdate | int | YES |  | 单据日期（YYYYMMDD） |
+| 4 | c_store_id | bigint | YES |  | 店仓ID |
+| 5 | tot_amt_actual | decimal(18,2) | YES |  | 实收金额 |
+| 6 | tot_amt_list | decimal(18,2) | YES |  | 吊牌金额 |
+| 7 | tot_qty | decimal(18,4) | YES |  | 总数量 |
+| 8 | status | int | YES |  | 单据状态 |
+| 9 | isactive | char(1) | YES |  | 是否有效 |
+| 10 | modifieddate | datetime | YES |  | 修改时间 |
+| 11 | etl_batch_id | bigint | NO | 0 | ETL批次号 |
+| 12 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP | ETL加载时间 |
 
 ## ods_m_retailitem
 - 描述: ODS-零售单明细表
@@ -350,13 +348,28 @@
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | id | bigint | NO |  | 明细ID |
-| 2 | m_retail_id | bigint | YES |  |  |
-| 3 | m_product_id | bigint | YES |  |  |
-| 4 | m_productalias_id | bigint | YES |  |  |
-| 5 | qty | decimal(18,4) | YES |  |  |
-| 6 | pricelist | decimal(18,2) | YES |  |  |
-| 7 | priceactual | decimal(18,2) | YES |  |  |
-| 8 | tot_amt_actual | decimal(18,2) | YES |  |  |
-| 9 | tot_amt_list | decimal(18,2) | YES |  |  |
-| 10 | etl_batch_id | varchar(32) | NO |  |  |
-| 11 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 2 | m_retail_id | bigint | YES |  | 主表ID |
+| 3 | m_product_id | bigint | YES |  | 商品ID |
+| 4 | m_productalias_id | bigint | YES |  | SKU ID |
+| 5 | qty | decimal(18,4) | YES |  | 数量 |
+| 6 | pricelist | decimal(18,2) | YES |  | 吊牌价 |
+| 7 | priceactual | decimal(18,2) | YES |  | 实收单价 |
+| 8 | tot_amt_actual | decimal(18,2) | YES |  | 实收金额 |
+| 9 | tot_amt_list | decimal(18,2) | YES |  | 吊牌金额 |
+| 10 | modifieddate | datetime | YES |  | 修改时间（线上通道） |
+| 11 | settime | datetime | YES |  | 设置时间（线下通道） |
+| 12 | etl_batch_id | varchar(32) | NO |  | ETL批次号 |
+| 13 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP | ETL加载时间 |
+
+## ods_sync_state
+- 描述: ODS增量同步水位表
+
+| 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | table_name | varchar(64) | NO |  | 表名（如 ods_m_retailitem、ods_m_retailitem_settime） |
+| 2 | last_sync | datetime | YES |  | 水位时间（按不同通道分别记录） |
+| 3 | current_window_start | datetime | YES |  | 当前窗口起点 |
+| 4 | current_window_end | datetime | YES |  | 当前窗口终点 |
+| 5 | status | varchar(20) | YES |  | 状态（running/pending/success） |
+| 6 | updated_at | datetime | YES | CURRENT_TIMESTAMP | 最近更新时间 |
+| 7 | rows_written | int | YES | 0 | 最近一次写入行数 |

@@ -4,9 +4,9 @@
 
 **基于Oracle到MySQL的珠宝电商数据仓库项目**
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![Oracle](https://img.shields.io/badge/Oracle-11g-red.svg)](https://www.oracle.com/)
-[![MySQL](https://img.shields.io/badge/MySQL-5.7+-blue.svg)](https://www.mysql.com/)
+[![Python](https://img.shields.io/badge/Python-3.13.9-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Oracle](https://img.shields.io/badge/Oracle-19c_EE-F80000?logo=oracle&logoColor=white)](https://www.oracle.com/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0.44-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 
 </div>
 
@@ -73,6 +73,9 @@
 
 | 数据层 | 名称 | 表前缀 | 说明 | 更新频率 |
 |--------|------|--------|------|----------|
+| **ODS** | 原始层 | `ods_*` | 1:1复制源表（可选） | 视需要全量 |
+|  注：零售明细存在两条写入链路（线上/线下），增量同步采用“双水位”策略：
+|        |      |        | - `MODIFIEDDATE`：线上通道； - `SETTIME`：线下门店通道（DOCNO/ORDERNO 前缀含 `RT`） | |
 | **DIM** | 维度层 | `dim_*` | 商品、店仓等主数据 | 每日全量 |
 | **DWS** | 汇总层 | `dws_*` | 日粒度销售、库存明细 | 销售增量/库存快照 |
 | **ADS** | 应用层 | `ads_*` | 业务主题宽表（库存健康度等） | 每日全量 |
@@ -95,6 +98,10 @@ hefang_dw/
 ├── etl_dws_sales.py             # 销售明细ETL（SKU粒度）
 ├── etl_dws_inventory.py         # 库存明细ETL（SKU粒度）
 ├── etl_ads_health.py            # 库存健康度ETL
+├── etl_ods_fa_storage.py         # ODS库存全量同步（可选）
+├── etl_ods_m_retail.py           # ODS零售主表全量同步（可选）
+├── etl_ods_m_retailitem.py       # ODS零售明细全量同步（可选）
+├── run_ods.py                    # ODS全量同步入口（可选）
 ├── test_etl_automation.py       # ETL自动化测试
 │
 ├── tools/                       # 辅助工具脚本（非运行链路）
@@ -117,6 +124,9 @@ hefang_dw/
 │   ├── 问题排查手册.md          # 常见问题与解决方案
 │   ├── mysql_data_dictionary.md # MySQL数据字典（主）
 │   └── misc/                    # 其他文档
+│
+├── SQL/                         # SQL脚本
+│   └── create_ods_tables.sql     # ODS建表SQL（可选）
 │
 ├── README.md                    # 本文档
 ├── logs/                        # 日志输出目录
@@ -261,6 +271,26 @@ python run_etl.py
 [5/7] dws_inventory_daily (库存明细) ✅
 [6/7] dabo_ready (达播数据就绪检查/回填) ✅
 [7/7] ads_inventory_health (库存健康度) ✅
+```
+
+### 4.1 ODS全量同步（可选）
+
+```bash
+# 先在MySQL执行 SQL/create_ods_tables.sql 建表
+python run_ods.py
+```
+
+### 4.2 ODS增量同步（推荐）
+
+```bash
+# 默认：增量模式（回刷7天），窗口由脚本按模式自动选择
+python run_ods.py
+
+# 强制全量
+python run_ods.py --full
+
+# 调整回刷天数或窗口大小
+python run_ods.py --backfill-days 14 --window-days 1
 ```
 
 ### 5. 验证数据

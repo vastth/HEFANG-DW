@@ -241,7 +241,7 @@ SKU信息 ← dim_sku
 - 库存状态（滞销/缺货/正常/过高）
 - ABC分级（按销售额累计占比）
 - 建议补货 = (90-周转天数)*日均销量 - 退货 - 采购欠数
-- 自然销量 = 全量销量 - 达播销量（用于自然销售加速度与趋势判断）
+- 自然销量 = 电商+云仓销量 - 达播销量（用于自然销售加速度与趋势判断）
 ```
 
 ---
@@ -252,18 +252,41 @@ SKU信息 ← dim_sku
 
 | 目标表 | 源表 | 策略 | 说明 |
 |--------|------|------|------|
+| ods_fa_storage | FA_STORAGE | 全量覆盖（可选） | ODS原始层，独立执行，不影响现有DWS/ADS |
+| ods_m_retail | M_RETAIL | 全量覆盖（可选） | ODS原始层，独立执行，不影响现有DWS/ADS |
+| ods_m_retailitem | M_RETAILITEM | 全量覆盖（可选） | ODS原始层，独立执行，不影响现有DWS/ADS |
 | dim_product | M_PRODUCT + M_DIM | 全量覆盖 | 商品信息可能改 |
 | dim_sku | M_PRODUCT_ALIAS + M_ATTRIBUTESETINSTANCE | 全量覆盖 | SKU信息可能改 |
 | dim_store | C_STORE + C_AREA | 全量覆盖 | 门店可能新增 |
-| dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天 |
-| dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存（不做主销品类过滤） |
+| dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天（全渠道、全品类；业务筛选下沉ADS） |
+| dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存（总仓+云仓，不做主销品类过滤） |
 | ads_inventory_health | MySQL内计算 | 重新计算 | 基于dws层 |
 | ads_dabo_daily_sales | CSV文件 | 文件驱动 | 监听例行/紧急目录 |
 | log_dabo_import | ETL日志 | 追加写入 | 每次导入记录 |
 
+**ODS增量同步规则（阶段二）**
+1. 增量条件：主通道按 `MODIFIEDDATE` 回刷窗口，默认回刷 7 天。
+2. 双水位策略：
+    - 线上通道（`MODIFIEDDATE IS NOT NULL`）按 `MODIFIEDDATE` 增量。
+    - 线下通道（`MODIFIEDDATE IS NULL` 且 `SETTIME IS NOT NULL`）按 `SETTIME` 增量。
+3. 窗口边界：使用半开区间 `>= start_ts` 且 `< end_ts`，避免重叠/漏数。
+4. 稳定排序：
+    - `MODIFIEDDATE` 通道按 `MODIFIEDDATE, ID` 排序。
+    - `SETTIME` 通道按 `SETTIME, ID` 排序。
+5. 断点续跑：ODS 使用 `ods_sync_state` 记录窗口起止与状态，支持双水位。
+    - `ods_m_retailitem` 记录 `MODIFIEDDATE` 水位。
+    - `ods_m_retailitem_settime` 记录 `SETTIME` 水位。
+6. 性能前提：Oracle 侧需有 `M_RETAIL(MODIFIEDDATE, ID)`、
+    `M_RETAILITEM(MODIFIEDDATE, ID)`、`M_RETAILITEM(SETTIME, ID)` 索引。 (DBA无法判断加索引的风险，所以暂时没有实施 建立该索引)
+
 ---
 
 ### 3.2 同步时序
+
+**ODS（可选，独立执行）**
+```
+任意时间  run_ods.py（全量覆盖）
+```
 
 ```
 03:00  ETL开始
@@ -301,8 +324,7 @@ mysql.execute(f"DELETE FROM dws_sales_daily WHERE date_id >= {start_date} AND da
 df = oracle.query(sales_sql.format(start_date=start_date, end_date=end_date))
 # 关键过滤：
 # - 只取SKU（M_PRODUCTALIAS_ID IS NOT NULL）
-# - 只取电商/云仓门店（s.CODE LIKE 'DS%' OR s.IS_ALLO2OSTORAGE='Y'）
-# - 只取主销品类（M_DIM4_ID IN 134,142,139,138,141,143,133,136,140,137,144,145）
+# - 业务筛选在ADS层完成（如电商/云仓、主销品类）
 mysql.to_sql(df, 'dws_sales_daily', if_exists='append')
 ```
 
@@ -335,7 +357,7 @@ df = oracle.query("""
         fs.M_PRODUCT_ID AS product_id,
         fs.M_PRODUCTALIAS_ID AS m_productalias_id,
         fs.QTY AS qty,
-        fs.QTYVALID AS qty_valid,
+        fs.QTY AS qty_valid,
         NVL(fs.QTYPURCHASEREM, 0) AS qtypurchaserem
     FROM FA_STORAGE fs
         LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
@@ -392,7 +414,7 @@ SKU信息 ← dim_sku
 4. 判断库存状态
 5. 计算ABC分级
 6. 生成建议补货
-7. 计算自然销量与自然加速度（全量销量 - 达播销量）
+7. 计算自然销量与自然加速度（电商+云仓销量 - 达播销量）
 8. 达播数据就绪时回填当日达播/自然字段
 ```
 
