@@ -3,6 +3,32 @@
 > 说明：按日期与版本整理，条目按“Added / Changed / Fixed / Database / Docs”分类。
 
 
+## 2026-02-26
+
+### v0.6.3 — ODS双水位与质检链路（2026-02-26）
+
+#### Added
+- 新增 ODS 抽取链路：`etl_ods_fa_storage.py`、`etl_ods_m_retail.py`、`etl_ods_m_retailitem.py`、`run_ods.py`。
+- 新增 ODS 质量校验工具：`tools/check_ods_incremental.py`、`tools/check_ods_retailitem_quality.py`。
+- 明细双通道增量：`MODIFIEDDATE`（线上）与 `SETTIME`（线下）双水位对账与拆分校验。
+
+#### Changed
+- `run_ods.py` 集成质量校验并输出日志 `logs/ods_qc_*.log`。
+- 明细增量逻辑改为双水位并记录 `ods_m_retailitem_settime` 水位。
+
+#### Fixed
+- 对账工具 `--as-of` 截止时间过滤兼容 `M_RETAIL` 查询别名。
+- 全量完成后同步写入 `settime` 水位，避免后续增量再次全量回刷。
+
+#### Database / SQL
+- 新增 ODS 建表与增量迁移脚本：`SQL/create_ods_tables.sql`、`SQL/alter_ods_incremental.sql`。
+- `ods_m_retailitem` 增加 `settime` 字段及索引。
+
+#### Docs
+- 更新 `README.md`：ODS 双水位说明、质量校验入口与日志说明。
+- 更新 `docs/数据仓库与ETL手册.md`、`docs/数据结构与映射手册.md`、`docs/mysql_data_dictionary.md` 同步 ODS 口径与字段。
+
+
 ## 2026-02-24
 
 ### v0.6.2 — ETL摘要通知与调度入口统一（2026-02-24）

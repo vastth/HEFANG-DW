@@ -156,8 +156,10 @@ END AS 库存周转天数,
 -- 库存状态
 CASE 
     WHEN 库存数量 > 0 AND 销售数量 = 0 THEN '滞销'
+    WHEN 库存数量 = 0 AND 销售数量 = 0 THEN '停售'
     WHEN 销售数量 > 0 AND 周转天数 < 30 THEN '紧急缺货'
     WHEN 销售数量 > 0 AND 周转天数 < 70 THEN '需补货'
+    WHEN 销售数量 > 0 AND 周转天数 <= 90 THEN '正常'
     WHEN 销售数量 > 0 AND 周转天数 > 90 THEN '库存过高'
     ELSE '正常'
 END AS 库存状态,
@@ -527,4 +529,37 @@ ROUND(数值, 小数位数)
 
 ---
 
-*文档版本: 2.1 | 更新日期: 2026-02-04  *
+### 4.6 SPU vs SKU 对账字段说明
+
+用于 [SQL/test_spu_vs_sku_mysql.sql](../SQL/test_spu_vs_sku_mysql.sql) 的差异字段：
+
+| 字段 | 含义 |
+|------|------|
+| inv_date | 库存快照日期（取 dws_inventory_daily 最大 date_id） |
+| spu_qty / sku_qty | SPU/SKU 粒度库存汇总数量 |
+| diff_qty | SKU 库存合计 - SPU 库存合计 |
+| spu_sales_qty / sku_sales_qty | SPU/SKU 粒度近30天销量汇总 |
+| diff_sales_qty | SKU 近30天销量 - SPU 近30天销量 |
+| spu_return_qty / sku_return_qty | SPU/SKU 粒度近30天退货数量汇总 |
+| diff_return_qty | SKU 近30天退货量 - SPU 近30天退货量 |
+| str_to_date | 日期转换函数（用于回推 sales_start） |
+
+---
+
+### 4.7 索引与脚本变量速记
+
+| 名称 | 含义 | 来源脚本 |
+|------|------|----------|
+| idx_inv_store_code | dws_inventory_daily 店仓编码索引（可选） | SQL/alter_dws_inventory_add_store_fields.sql |
+| idx_product_id | dim_sku.product_id 普通索引 | SQL/create_dim_sku.sql |
+| index_name | information_schema.statistics 中的索引名字段 | SQL/alter_dws_inventory_unique_key.sql |
+
+---
+
+## 版本记录
+
+| 版本 | 日期 | 变更内容 |
+|------|------|----------|
+| v2.2 | 2026-02-27 | 更新SQL模板与速查内容 |
+| v2.3 | 2026-02-28 | 补充SPU vs SKU对账字段说明 |
+| v2.4 | 2026-02-28 | 补充索引与脚本变量速记 |

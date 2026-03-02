@@ -2,6 +2,7 @@
 
 ## ads_daily_report
 - 描述: 电商日报应用表
+- 状态: 规划/未实现（代码暂无对应ETL）
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -84,6 +85,7 @@
 
 ## ads_sales_summary
 - 描述: 销售汇总应用表
+- 状态: 规划/未实现（代码暂无对应ETL）
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -137,6 +139,8 @@
 
 ## dim_category
 - 描述: 类别维度表
+- 状态: 已实现（数据库结构快照）
+- 证据: reports/mysql_schema_snapshot.json（2026-02-28 22:32:28）
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -148,6 +152,9 @@
 
 ## dim_channel
 - 描述: 电商渠道维度表
+- 状态: 已实现（数据库结构快照）
+- 证据: reports/snapshot_mysql_hefangdw_schema.json（2026-03-01 01:41:36）
+- 说明: 当前无对应ETL脚本，字段来自数据库结构快照，未在代码实现写入。来源：[tools/snapshot_mysql_hefangdw_schema.py](tools/snapshot_mysql_hefangdw_schema.py#L1-L24)
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -162,6 +169,7 @@
 
 ## dim_date
 - 描述: 日期维度表
+- 说明: dim_date 为静态维度表，当前未在代码实现自动生成。
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -183,6 +191,7 @@
 
 ## dim_product
 - 描述: 商品维度表
+- 说明: year_id/year_name 字段当前未在代码实现写入（对应 M_DIM2_ID 维度）。
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -208,6 +217,7 @@
 | 20 | material | text | YES |  |  |
 
 ## dim_product_attr
+- 描述: 商品属性表（颜色/尺寸，取每个货号的第一个SKU）
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -269,6 +279,7 @@
 
 ## dws_sales_daily
 - 描述: 日销售汇总表
+- 说明: net_qty/net_amount 字段当前未在代码实现写入（默认值为0）。
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -282,8 +293,8 @@
 | 8 | sales_amount_list | decimal(14,2) | YES | 0.00 | 吊牌金额 |
 | 9 | return_qty | int | YES | 0 | 退货数量 |
 | 10 | return_amount | decimal(14,2) | YES | 0.00 | 退货金额 |
-| 11 | net_qty | int | YES | 0 | 净销量 |
-| 12 | net_amount | decimal(14,2) | YES | 0.00 | 净销售额 |
+| 11 | net_qty | int | YES | 0 | 净销量（字段存在但当前ETL不填充，默认0） |
+| 12 | net_amount | decimal(14,2) | YES | 0.00 | 净销售额（字段存在但当前ETL不填充，默认0） |
 | 13 | order_count | int | YES | 0 | 订单数 |
 | 14 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
 | 15 | updated_at | datetime | YES | CURRENT_TIMESTAMP |  |
@@ -293,6 +304,7 @@
 
 ## etl_log
 - 描述: ETL执行日志表
+- 说明: 日志表结构预留，当前未在代码实现写入。
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -373,3 +385,16 @@
 | 5 | status | varchar(20) | YES |  | 状态（running/pending/success） |
 | 6 | updated_at | datetime | YES | CURRENT_TIMESTAMP | 最近更新时间 |
 | 7 | rows_written | int | YES | 0 | 最近一次写入行数 |
+
+---
+
+## 版本记录
+
+| 版本 | 日期 | 变更内容 |
+|------|------|----------|
+| v1.0 | 2026-02-27 | 初版数据字典 |
+| v1.1 | 2026-02-28 | 标注规划表未实现状态 |
+| v1.2 | 2026-02-28 | 标注dim_date未在代码实现自动生成 |
+| v1.3 | 2026-02-28 | 标注dim_category/dim_channel为已实现 |
+| v1.4 | 2026-02-28 | 标注year/net字段与etl_log未在代码实现写入 |
+| v1.5 | 2026-03-01 | 更新dim_channel快照证据并标注未在代码实现 |

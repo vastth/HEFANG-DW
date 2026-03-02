@@ -50,10 +50,10 @@
 | 层级 | 名称 | 说明 | 示例表 |
 |------|------|------|--------|
 | ODS | 原始数据层 | 1:1复制源表（保留） | ods_m_retail, ods_fa_storage |
-| DIM | 维度层 | 维度表 | dim_product, dim_store, dim_sku, dim_date |
-| DWD | 明细事实层 | 清洗后的明细（保留） | dwd_retail_detail |
+| DIM | 维度层 | 维度表 | dim_product, dim_product_attr, dim_store, dim_sku, dim_date |
+| DWD | 明细事实层 | 清洗后的明细（保留） | 暂无（DWD层未在代码实现） |
 | DWS | 汇总事实层 | 按主题汇总 | dws_sales_daily, dws_inventory_daily |
-| ADS | 应用层 | 面向应用 | ads_daily_report, ads_inventory_health |
+| ADS | 应用层 | 面向应用 | ads_inventory_health, ads_dabo_daily_sales（已实现）；ads_daily_report/ads_sales_summary（规划，未在代码实现） |
 
 ---
 
@@ -101,12 +101,26 @@ CREATE TABLE dim_product (
     series_name     VARCHAR(100),
     brand_id        INT,
     brand_name      VARCHAR(50),
+    year_id         INT,
+    year_name       VARCHAR(20),
     price_list      DECIMAL(12,2),
     price_cost      DECIMAL(12,2),
+    material        TEXT,
     is_main_product CHAR(1),
     is_active       CHAR(1),
     created_at      DATETIME,
     updated_at      DATETIME
+);
+```
+
+> 注：`material` 来自 Oracle `M_PRODUCT.FABELEMENT`（材质成分）。`year_id`/`year_name` 对应 Oracle `M_DIM2_ID` 维度，当前ETL未填充。
+
+**dim_product_attr（商品属性表）**
+```sql
+CREATE TABLE dim_product_attr (
+    product_id      BIGINT,
+    color           TEXT,
+    size            TEXT
 );
 ```
 
@@ -144,6 +158,7 @@ CREATE TABLE dim_sku (
 ```
 
 **dim_date（日期维度）**
+说明：dim_date 为静态维度表，当前未在代码实现自动生成。
 ```sql
 CREATE TABLE dim_date (
     date_id         INT PRIMARY KEY,
@@ -169,6 +184,7 @@ CREATE TABLE dim_date (
 ### 2.2 事实表设计
 
 **dws_sales_daily（日销售汇总）**
+说明：表结构与索引为SQL/人工建表，当前未在代码实现自动建表/建索引；`net_qty`/`net_amount` 也未在代码实现写入。
 ```sql
 CREATE TABLE dws_sales_daily (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -181,9 +197,9 @@ CREATE TABLE dws_sales_daily (
     sales_amount_list DECIMAL(14,2),
     return_qty      INT,
     return_amount   DECIMAL(14,2),
-    net_qty         INT,
-    net_amount      DECIMAL(14,2),
-    order_count     INT,
+    net_qty         INT,          -- ⚠️ 当前ETL未填充，MySQL默认0
+    net_amount      DECIMAL(14,2),-- ⚠️ 当前ETL未填充，MySQL默认0
+    order_count     INT,          -- 仅统计正单(TOT_AMT_ACTUAL>0)的不重复零售单数
     store_code      VARCHAR(32),
     is_cloud_store  CHAR(1),
     created_at      DATETIME,
@@ -236,10 +252,11 @@ CREATE TABLE dws_inventory_daily (
 SKU信息 ← dim_sku
 仓库信息 ← dim_store
 
--- 计算内容
 - 周转天数 = 库存 / (30天销量 / 30)
-- 库存状态（滞销/缺货/正常/过高）
-- ABC分级（按销售额累计占比）
+- 库存状态（滞销/停售/紧急缺货/需补货/正常/库存过高）
+- 状态优先级（紧急缺货=1…停售=6）
+- SABC分级（按销售额累计占比）
+- 销售排名/占比/累计占比（sales_rank/sales_ratio/cumulative_ratio）
 - 建议补货 = (90-周转天数)*日均销量 - 退货 - 采购欠数
 - 自然销量 = 电商+云仓销量 - 达播销量（用于自然销售加速度与趋势判断）
 ```
@@ -253,9 +270,10 @@ SKU信息 ← dim_sku
 | 目标表 | 源表 | 策略 | 说明 |
 |--------|------|------|------|
 | ods_fa_storage | FA_STORAGE | 全量覆盖（可选） | ODS原始层，独立执行，不影响现有DWS/ADS |
-| ods_m_retail | M_RETAIL | 全量覆盖（可选） | ODS原始层，独立执行，不影响现有DWS/ADS |
-| ods_m_retailitem | M_RETAILITEM | 全量覆盖（可选） | ODS原始层，独立执行，不影响现有DWS/ADS |
-| dim_product | M_PRODUCT + M_DIM | 全量覆盖 | 商品信息可能改 |
+| ods_m_retail | M_RETAIL | 增量为主（默认回刷7天，可全量） | ODS原始层，独立执行，不影响现有DWS/ADS |
+| ods_m_retailitem | M_RETAILITEM | 双水位增量（MODIFIEDDATE + SETTIME，可全量） | ODS原始层，独立执行，不影响现有DWS/ADS |
+| dim_product | M_PRODUCT + M_DIM + M_ATTRIBUTESETINSTANCE | 全量覆盖 | 商品信息可能改，含材质字段 |
+| dim_product_attr | M_ATTRIBUTESETINSTANCE（通过M_PRODUCT_ALIAS关联） | 全量覆盖(replace) | 每个商品取第一个SKU的颜色/尺寸 |
 | dim_sku | M_PRODUCT_ALIAS + M_ATTRIBUTESETINSTANCE | 全量覆盖 | SKU信息可能改 |
 | dim_store | C_STORE + C_AREA | 全量覆盖 | 门店可能新增 |
 | dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天（全渠道、全品类；业务筛选下沉ADS） |
@@ -279,13 +297,15 @@ SKU信息 ← dim_sku
 6. 性能前提：Oracle 侧需有 `M_RETAIL(MODIFIEDDATE, ID)`、
     `M_RETAILITEM(MODIFIEDDATE, ID)`、`M_RETAILITEM(SETTIME, ID)` 索引。 (DBA无法判断加索引的风险，所以暂时没有实施 建立该索引)
 
+> 运行入口 `run_ods.py` 默认走增量模式并回刷7天，可通过 `--full` 强制全量；回刷天数可用 `--backfill-days` 调整。
+
 ---
 
 ### 3.2 同步时序
 
 **ODS（可选，独立执行）**
 ```
-任意时间  run_ods.py（全量覆盖）
+任意时间  run_ods.py（默认增量，--full 可全量）
 ```
 
 ```
@@ -428,7 +448,7 @@ SKU信息 ← dim_sku
 ```batch
 @echo off
 cd /d C:\Users\tianhao\PycharmProjects\hefang_dw
-python run_scheduled_etl.bat
+call run_scheduled_etl.bat
 ```
 
 **方式二：run_scheduled_etl.bat**
@@ -562,4 +582,64 @@ ETL_RETRY_SLEEP = 60  # 重试间隔秒数
 
 ---
 
-*文档版本: 2.2 | 更新日期: 2026-02-24 *
+### 4.7 文档同步闭环（SOP）
+
+**定义：文档是代码的派生物（Single Source of Truth）**
+规则：Python/SQL/配置是事实源；md 只能解释事实，不能自创事实。
+
+**目标：** 避免“看起来完整”而编造字段、流程、表关系。
+
+**闭环流程（6步）：**
+1. **事实源约束**：以 `*.py`、`*.sql`、配置为准，文档只能解释代码中的事实。
+2. **重构前审计**：生成“差异清单”（机器可读 JSON）。
+    - 产出字段：`docs_only`、`code_only`、`intersection`、`risk_level`。
+    - 输出路径：`reports/docs_code_alignment.json`。
+    - 审计命令：`python scripts/check_doc_sync.py --output reports/docs_code_alignment.json`。
+    - 降噪规则：审计脚本会自过滤审计元术语（如 advisories/non_blocking 标记词），避免将脚本自身新增输出词计入 `code_only` 噪音。
+3. **任务拆分为三阶段**：
+    - 阶段A：仅扫描，不改文档。输出差异清单 + 风险分级（高/中/低）。
+    - 阶段B：只改高风险项（表名、字段名、核心计算逻辑、任务入口）。
+    - 阶段C：回归复扫，确认差异数量下降；否则继续下一轮。
+4. **Agent 改文档约束**（每轮固定提示）：
+    - 仅允许修改 `docs/*.md` 与 `README.md`。
+    - 每条修改必须附“来源代码文件 + 行号”。
+    - 禁止补充无法从代码证明的描述。
+    - 若 MySQL 表结构存在字段，则 `DATA_CONTRACTS` 的“关键字段”必须包含；且当 ETL 未写入时，含义中必须注明“字段存在但当前ETL不填充”。
+    - 输出“未能确认项”（不得猜测补全）。
+    - 每轮最多改 N 条（例如 20 条）。
+5. **文档验收门禁（可验收条件）**：
+    - 高风险差异项为 0。
+    - 标记为 `reason=field_exists_but_not_filled` 的项仅作提醒，不计入阶段B/阶段C阻断条件。
+    - 关键对象（任务名、表名、入口脚本）与代码一致。
+    - 本轮新增代码若无文档映射，阻断合并。
+6. **标准化 SOP**：
+    - 开发改代码 → 运行审计 → 按清单分批改文档 → 人工复核高风险 → 复跑审计 → 合并。
+
+**任务模板（中文，可直接用）：**
+你现在是文档同步审计员。
+第一步只读取 `reports/docs_code_alignment.json`，不要改文档。
+输出：高/中/低风险差异清单（含原因）。
+
+第二步仅修复高风险项，且只允许修改 `README.md` 和 `docs/*.md`。
+每条修改必须给出“来源代码文件+行号”。
+禁止补充无法从代码证明的信息。
+
+第三步给出本轮修改摘要 + 未确认项列表。
+最后提示复跑审计命令并比较前后差异数量。
+
+---
+
+## 版本记录
+
+| 版本 | 日期 | 变更内容 |
+|------|------|----------|
+| v2.3 | 2026-02-27 | 更新ETL配置说明与排查建议 |
+| v2.4 | 2026-02-28 | 新增文档同步闭环（SOP） |
+| v2.5 | 2026-02-28 | 补充文档审计命令与统一输出路径 |
+| v2.6 | 2026-02-28 | 明确DWD/ADS示例实现范围 |
+| v2.7 | 2026-02-28 | 标注dim_date未在代码实现自动生成 |
+| v2.8 | 2026-02-28 | 标注dws_sales_daily未在代码实现自动建表与net字段写入 |
+| v2.9 | 2026-03-02 | 补充审计规则：结构字段入契约与未填充标注 |
+| v3.0 | 2026-03-02 | 增加未填充字段提醒项 non-blocking 规则 |
+| v3.1 | 2026-03-02 | 增加审计元术语自过滤降噪说明 |
+| v3.2 | 2026-03-02 | 增加仅过滤审计脚本内部函数名策略 |

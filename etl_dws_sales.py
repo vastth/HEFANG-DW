@@ -51,8 +51,6 @@ def extract_from_oracle(start_date, end_date):
         AND r.BILLDATE >= {start_date}
         AND r.BILLDATE <= {end_date}
         AND ri.M_PRODUCTALIAS_ID IS NOT NULL
-        AND (s.CODE LIKE 'DS%' OR s.IS_ALLO2OSTORAGE = 'Y')
-        AND p.M_DIM4_ID IN (134,142,139,138,141,143,133,136,140,137,144,145)
     GROUP BY r.BILLDATE, r.C_STORE_ID, s.CODE, NVL(s.IS_ALLO2OSTORAGE, 'N'), ri.M_PRODUCT_ID, ri.M_PRODUCTALIAS_ID
     """
     

@@ -100,10 +100,10 @@ hefang_dw/
 ├── etl_dws_sales.py             # 销售明细ETL（SKU粒度）
 ├── etl_dws_inventory.py         # 库存明细ETL（SKU粒度）
 ├── etl_ads_health.py            # 库存健康度ETL
-├── etl_ods_fa_storage.py         # ODS库存全量同步（可选）
-├── etl_ods_m_retail.py           # ODS零售主表全量同步（可选）
-├── etl_ods_m_retailitem.py       # ODS零售明细全量同步（可选）
-├── run_ods.py                    # ODS全量同步入口（可选）
+├── etl_ods_fa_storage.py         # ODS库存同步（默认全量，可选执行）
+├── etl_ods_m_retail.py           # ODS零售主表增量同步（默认回刷7天，可切全量）
+├── etl_ods_m_retailitem.py       # ODS零售明细双水位增量（MODIFIEDDATE+SETTIME，可切全量）
+├── run_ods.py                    # ODS入口（默认增量，可选全量/调整回刷）
 ├── test_etl_automation.py       # ETL自动化测试
 │
 ├── tools/                       # 辅助工具脚本（非运行链路）
@@ -125,8 +125,9 @@ hefang_dw/
 │   ├── 数据结构与映射手册.md     # 源表与目标表映射
 │   ├── 业务逻辑与指标规范.md     # 指标定义与计算公式
 │   ├── SQL开发手册.md           # SQL模板与开发规范
-│   ├── 问题排查手册.md          # 常见问题与解决方案
-│   ├── mysql_data_dictionary.md # MySQL数据字典（主）
+│   ├── ETL业务逻辑说明.md     # 每个ETL脚本的人话版逻辑说明
+│   ├── 问题排查手册.md          # 常见问题与解决方案（待创建）
+│   ├── MYSQL数据字典.md # MySQL数据字典（主）
 │   └── misc/                    # 其他文档
 │
 ├── SQL/                         # SQL脚本
@@ -164,9 +165,11 @@ pip install python-oracledb pymysql pandas openpyxl
 ```python
 # Oracle源数据库（伯俊ERP）
 ORACLE_CONFIG = {
-    'user': 'your_username',
-    'password': 'your_password',
-    'dsn': 'your_host:1521/your_service_name'
+   'user': 'your_username',
+   'password': 'your_password',
+   'host': 'your_host',
+   'port': 1521,
+   'service_name': 'orcl'
 }
 
 # MySQL目标数仓
@@ -277,20 +280,10 @@ python run_etl.py
 [7/7] ads_inventory_health (库存健康度) ✅
 ```
 
-### 4.1 ODS全量同步（可选）
+### 4.1 ODS同步（默认增量，可切全量）
 
 ```bash
-# 先在MySQL执行 SQL/create_ods_tables.sql 建表
-python run_ods.py
-```
-
-说明：`run_ods.py` 会在抽取完成后自动执行 ODS 质量校验，并将结果写入 `logs/ods_qc_*.log`。
-说明：质量校验默认使用抽取完成时刻作为 `--as-of` 截止时间，避免时间漂移。
-
-### 4.2 ODS增量同步（推荐）
-
-```bash
-# 默认：增量模式（回刷7天），窗口由脚本按模式自动选择
+# 默认：增量模式（回刷7天，自动分窗口；零售明细双水位 MODIFIEDDATE + SETTIME）
 python run_ods.py
 
 # 强制全量
@@ -300,10 +293,12 @@ python run_ods.py --full
 python run_ods.py --backfill-days 14 --window-days 1
 ```
 
-可选参数：
+质检与可选参数：
 - 跳过质检：`--skip-qc`
 - 质检全量：`--qc-all`
 - 质检回看天数：`--qc-days 7`
+
+说明：`run_ods.py` 会在抽取完成后自动执行 ODS 质量校验，并将结果写入 `logs/ods_qc_*.log`；质检默认使用抽取完成时刻作为 `--as-of` 截止时间，避免时间漂移。
 
 ### 5. 验证数据
 
@@ -327,15 +322,18 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | 字段 | 说明 | 备注 |
 |------|------|------|
 | product_id | 商品ID | 主键 |
-| product_code | 商品编码 | 13位条码 |
+| product_code | 商品款号 | M_PRODUCT.NAME |
 | product_name | 商品名称 | - |
-| brand | 品牌 | - |
-| category | 类别 | 耳饰/项链/戒指等 |
-| series | 系列 | - |
-| property | 性质 | 常规款/限定款等 |
+| brand_id/brand_name | 品牌 | 维度映射 |
+| category_id/category_name | 类别 | 耳饰/项链/戒指等 |
+| series_id/series_name | 系列 | - |
+| property_id/property_name | 性质 | 常规款/限定款等 |
 | material | 材质成分 | 如"925银、合成立方氧化锆" |
-| price_retail | 吊牌价 | - |
+| price_list | 吊牌价 | - |
 | price_cost | 成本价 | - |
+| is_main_product | 是否主销品 | Y/N |
+| is_active | 是否有效 | Y/N |
+| created_at | 创建时间 | 来自 Oracle CREATIONDATE |
 
 **源表**：Oracle `M_PRODUCT`, `M_DIM`  
 **更新策略**：每日全量覆盖
@@ -348,6 +346,9 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | sku_barcode | SKU条码 | - |
 | sku_color | 颜色 | - |
 | sku_size | 尺寸 | - |
+| is_active | 是否有效 | Y/N |
+| created_at | 创建时间 | 来自 Oracle CREATIONDATE |
+| updated_at | 更新时间 | ETL运行时间 |
 
 **源表**：Oracle `M_PRODUCT_ALIAS`, `M_ATTRIBUTESETINSTANCE`  
 **更新策略**：每日全量覆盖
@@ -358,7 +359,14 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | store_id | 店仓ID | 主键 |
 | store_code | 店仓编码 | 001=总仓, DS%=电商, RT%=门店 |
 | store_name | 店仓名称 | - |
+| area_id/area_name | 区域 | 维度映射 |
+| is_warehouse | 是否仓库 | 1/0 |
+| is_store | 是否门店 | 1/0 |
 | is_cloud_store | 是否云仓 | Y/N |
+| is_center | 是否物流中心 | Y/N |
+| store_type | 类型 | 总仓/电商/门店/测试/功能仓 |
+| is_active | 是否有效 | Y/N |
+| created_at | 创建时间 | ETL运行时间 |
 
 **源表**：Oracle `C_STORE`  
 **更新策略**：每日全量覆盖
@@ -371,17 +379,35 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | 字段 | 说明 | 计算逻辑 |
 |------|------|----------|
 | date_id | 日期 | YYYYMMDD格式 |
+| store_id | 店仓ID | - |
 | store_code | 店仓编码 | - |
 | is_cloud_store | 云仓标识 | Y/N |
 | product_id | 商品ID | - |
 | m_productalias_id | SKU ID | - |
 | sales_qty | 销售数量 | 正单数量 |
-| return_qty | 退货数量 | 负单数量（绝对值）|
-| net_qty | 净销量 | 销售-退货 |
 | sales_amount | 销售金额 | 正单金额 |
+| sales_amount_list | 吊牌金额 | 吊牌金额 |
+| return_qty | 退货数量 | 负单数量（绝对值）|
+| return_amount | 退货金额 | 负单金额（绝对值）|
+| order_count | 订单数 | 仅统计正单 |
+| 净销量 | 净销量 | 字段存在但当前ETL不填充，未在代码实现写入（默认0） |
+| 净销售额 | 净销售额 | 字段存在但当前ETL不填充，未在代码实现写入（默认0） |
+| etl_time | ETL时间 | 写入时间戳 |
+
+说明：净销量/净销售额字段名以 MYSQL 数据字典为准，当前未在代码实现写入。
 
 **源表**：Oracle `M_RETAIL`, `M_RETAILITEM`, `C_STORE`, `M_PRODUCT`  
 **更新策略**：增量更新（智能判断：凌晨查昨天，白天查今天）
+
+**代码字段命名对照（审计用）**：
+
+| 字段名 | 含义 | 说明 |
+|--------|------|------|
+| c_area_id | 门店区域ID | 对应 C_STORE.C_AREA_ID |
+| m_dim1_id | 品牌维度ID | 对应 M_PRODUCT.M_DIM1_ID |
+| m_attributesetinstance_id | 属性实例ID | 对应 M_PRODUCT_ALIAS.M_ATTRIBUTESETINSTANCE_ID |
+| start_time | 任务开始时间 | 脚本内变量，用于计算耗时 |
+| end_time | 任务结束时间 | 脚本内变量，用于计算耗时 |
 
 #### `dws_inventory_daily` - 库存明细表
 按日期+店仓+SKU粒度记录库存快照
@@ -389,12 +415,16 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | 字段 | 说明 | 备注 |
 |------|------|------|
 | date_id | 快照日期 | YYYYMMDD格式 |
+| store_id | 店仓ID | - |
 | store_code | 店仓编码 | - |
 | is_cloud_store | 云仓标识 | Y/N |
 | product_id | 商品ID | - |
 | m_productalias_id | SKU ID | - |
 | qty | 库存数量 | - |
+| qty_valid | 可用库存 | 取自 QTY（QTYVALID 未维护） |
+| qty_occupy | 占用数量 | 固定填0 |
 | qtypurchaserem | 采购欠数 | 在途库存（已下单未入库）|
+| etl_time | ETL时间 | 写入时间戳 |
 
 **源表**：Oracle `FA_STORAGE`, `C_STORE`, `M_PRODUCT`  
 **更新策略**：每日全量快照
@@ -408,18 +438,28 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 |----------|--------|------|
 | **基础信息** | product_id, product_code, product_name | 商品信息 |
 | | sku_id, sku_barcode, color, size | SKU信息 |
-| | brand, category, series, property | 分类属性 |
+| | category_id/category_name | 分类属性 |
+| | series_id/series_name, property_id/property_name | 分类属性 |
 | **库存指标** | total_qty / warehouse_qty / cloud_qty | 总库存/总仓/云仓 |
 | | purchase_rem_qty | 采购欠数（在途库存）|
 | **销售指标** | sales_qty_7d / sales_qty_30d | 近7天/30天销量 |
 | | sales_amt_30d | 近30天销售额 |
 | | return_qty_30d / return_amount_30d | 近30天退货量/退货额 |
 | | daily_avg_sales / daily_avg_sales_7d | 30天/7天日均销量 |
+| | dabo_sales_qty_30d / dabo_sales_qty_7d | 近30天/7天达播销量 |
+| | dabo_revenue_30d / dabo_revenue_7d | 近30天/7天达播销售额 |
+| | dabo_latest_date | 达播最新日期 |
+| | natural_sales_qty_30d / natural_sales_qty_7d | 近30天/7天自然销量 |
+| | natural_revenue_30d / natural_revenue_7d | 近30天/7天自然销售额 |
+| | natural_daily_avg_sales / natural_daily_avg_sales_7d | 自然日均销量 |
 | **周转指标** | turnover_days | 库存周转天数 |
 | | suggest_qty | 建议补货数量（可为负）|
 | **分级指标** | sku_grade | SABC分级 |
+| | sales_rank / sales_ratio / cumulative_ratio | 销售排名/占比/累计占比 |
 | | inventory_status / status_priority | 库存状态/优先级 |
 | **趋势指标** | sales_velocity / sales_trend | 销售加速度/趋势 |
+| | natural_sales_velocity | 自然销售加速度 |
+| **时间字段** | snapshot_date / etl_time / created_at | 快照/ETL时间 |
 
 **核心算法**：
 ```
@@ -501,6 +541,9 @@ python tools/check_ods_incremental.py --days 7
 # ODS明细质量对账（双通道拆分）
 python tools/check_ods_retailitem_quality.py --days 7
 
+# 输出分组（脚本打印标签）
+# ods_m_retailitem_all / ods_m_retailitem_online_modifieddate / ods_m_retailitem_offline_settime / ods_m_retailitem_unknown_nulls
+
 # 使用截止时间避免时间漂移
 python tools/check_ods_incremental.py --days 7 --as-of "2026-02-26 17:11:52"
 python tools/check_ods_retailitem_quality.py --days 7 --as-of "2026-02-26 17:11:52"
@@ -511,6 +554,12 @@ python tools/check_ods_retailitem_quality.py --days 7 --as-of "2026-02-26 17:11:
 ```bash
 # 导出库存健康度到Excel
 python export_ads.py
+
+# 导出文件名前缀（与脚本一致）
+# ads_inventory_health_
+
+# 导出文件名示例
+# ads_inventory_health-20260120.csv
 ```
 
 ---
@@ -525,12 +574,12 @@ python export_ads.py
 | [数据结构与映射手册](docs/数据结构与映射手册.md) | 源表结构、字段映射、取数逻辑 | 开发人员 |
 | [业务逻辑与指标规范](docs/业务逻辑与指标规范.md) | 指标定义、计算公式、业务规则 | 业务分析师、产品经理 |
 | [SQL开发手册](docs/SQL开发手册.md) | SQL模板、开发规范、最佳实践 | SQL开发者 |
-| [问题排查手册](docs/问题排查手册.md) | 常见问题、排查步骤、解决方案 | 运维人员 |
+| [ETL业务逻辑说明](docs/ETL业务逻辑说明.md) | 每个ETL脚本的人话版逻辑说明 | 所有人员 |
 
 ### 扩展文档
 
-- [mysql_data_dictionary.md](mysql_data_dictionary.md) - MySQL数据字典
-- [docs/mysql_data_dictionary.md](docs/mysql_data_dictionary.md) - 详细版数据字典
+- [docs/MYSQL数据字典.md](docs/MYSQL数据字典.md) - MySQL数据字典
+- [docs/ETL业务逻辑说明.md](docs/ETL业务逻辑说明.md) - 每个ETL脚本的人话版业务逻辑说明
 
 ---
 
@@ -562,6 +611,18 @@ python export_ads.py
 5. 标识字段：is_xxx / has_xxx
    示例：is_cloud_store, has_sales
 ```
+
+### 文档同步闭环
+
+- 事实源：`*.py`、`*.sql`、配置为准，文档仅解释事实。
+- 先审计再修订：`python scripts/check_doc_sync.py --output reports/docs_code_alignment.json`
+- 当要求审计对齐文档时，先询问是否调用快照脚本生成数据库快照（可选执行）。来源：[tools/snapshot_mysql_hefangdw_schema.py](tools/snapshot_mysql_hefangdw_schema.py#L1-L8)；[tools/snapshot_oracle_bosnds3_schema.py](tools/snapshot_oracle_bosnds3_schema.py#L1-L9)
+- 以差异清单分批修订，高风险项清零后再合并。
+- 高风险定义：表名（ods_/dwd_/dws_/ads_/dim_ 前缀）、入口脚本（run_etl.py / run_ods.py / scheduled_etl.py）、任务键名（如 dws_sales / dws_inventory / ads_health）。
+- 三阶段闭环：阶段A仅扫描不改文档；阶段B只改高风险项；阶段C复跑审计并对比差异数量。
+- 合并前必须更新 reports/docs_code_alignment.json（与文档修订同步）。
+- 证据引用格式示例：来源：[run_etl.py](run_etl.py#L43-L51)
+- 详细规范见 [docs/数据仓库与ETL手册.md](docs/数据仓库与ETL手册.md)。
 
 ---
 
@@ -602,6 +663,18 @@ hotfix/* - 紧急修复
 | v1.1 | 2026-01-19 | 新增采购欠数字段，优化建议补货算法 | tianxiaoyu911@gmail.com |
 | v1.2 | 2026-01-20 | 文档重构，新增架构说明与使用指南 | tianxiaoyu911@gmail.com |
 | v1.3 | 2026-01-30 | SKU维度与SKU粒度同步，销售智能判断与口径统一 | tianxiaoyu911@gmail.com |
+| v1.4 | 2026-02-28 | 更新MySQL数据字典文件名引用 | tianxiaoyu911@gmail.com |
+| v1.5 | 2026-02-28 | 增加文档同步闭环与审计命令 | tianxiaoyu911@gmail.com |
+| v1.6 | 2026-02-28 | 补充审计输出标签与导出文件名 | tianxiaoyu911@gmail.com |
+| v1.7 | 2026-02-28 | 补充高风险定义与入口脚本范围 | tianxiaoyu911@gmail.com |
+| v1.8 | 2026-02-28 | 同步阶段A/B/C闭环描述 | tianxiaoyu911@gmail.com |
+| v1.9 | 2026-02-28 | 增加审计JSON合并门禁 | tianxiaoyu911@gmail.com |
+| v2.0 | 2026-02-28 | 补充证据引用格式示例 | tianxiaoyu911@gmail.com |
+| v2.1 | 2026-02-28 | 调整导出文件示例与前缀说明 | tianxiaoyu911@gmail.com |
+| v2.2 | 2026-02-28 | 标注net字段未在代码实现写入 | tianxiaoyu911@gmail.com |
+| v2.3 | 2026-02-28 | 调整净销量/净销售额字段展示说明 | tianxiaoyu911@gmail.com |
+| v2.4 | 2026-02-28 | 补充代码字段命名对照表 | tianxiaoyu911@gmail.com |
+| v2.5 | 2026-02-28 | 增加审计前询问是否执行快照脚本 | tianxiaoyu911@gmail.com |
 
 ---
 
@@ -622,7 +695,7 @@ hotfix/* - 紧急修复
 **Q3: 数据不一致？**
 - 运行`check_data.py`进行质量检查
 - 对比源表与目标表记录数
-- 查看[问题排查手册](docs/问题排查手册.md)
+- 查看[ETL业务逻辑说明](docs/ETL业务逻辑说明.md)了解各脚本逻辑
 
 ### 联系方式
 
