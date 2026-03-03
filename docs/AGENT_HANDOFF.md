@@ -27,6 +27,25 @@
 
 ---
 
+### [2026-03-03 10:00] · GitHub Copilot · 新建标签 v0.6.4
+
+**摘要**：补充 CHANGELOG v0.6.4 条目并创建注释标签
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `CHANGELOG.md` | 修改 | 新增 v0.6.4 版本条目与来源行号 | 
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本次交接记录 |
+
+**Copilot 接棒须知**：
+- 来源：[CHANGELOG.md](CHANGELOG.md#L6-L20)
+- 已创建标签 v0.6.4（注释标签），当前指向 HEAD 提交
+- 若需发布，请确认是否需要提交变更并推送标签
+
+**未完成项**：
+- [ ] 确认是否需要提交 CHANGELOG 并执行 `git push --tags`
+
 ### [2026-03-02 17:37] · GitHub Copilot · 执行push前门禁复跑
 
 **摘要**：复跑check_doc_sync并确认high/medium为0

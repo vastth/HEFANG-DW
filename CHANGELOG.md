@@ -3,6 +3,23 @@
 > 说明：按日期与版本整理，条目按“Added / Changed / Fixed / Database / Docs”分类。
 
 
+## 2026-03-03
+
+### v0.6.4 — 文档审计与交接工具补齐（2026-03-03）
+
+#### Added
+- 新增文档审计脚本与术语过滤规则。来源：[scripts/check_doc_sync.py](scripts/check_doc_sync.py#L1-L80)
+- 新增环境自检脚本（Doctor）。来源：[scripts/doctor.ps1](scripts/doctor.ps1#L1-L72)
+- 新增交接日志写入脚本。来源：[scripts/log_agent_action.py](scripts/log_agent_action.py#L1-L76)
+- 新增 MySQL/Oracle 结构快照导出脚本。来源：[tools/snapshot_mysql_hefangdw_schema.py](tools/snapshot_mysql_hefangdw_schema.py#L1-L86)、[tools/snapshot_oracle_bosnds3_schema.py](tools/snapshot_oracle_bosnds3_schema.py#L1-L78)
+
+#### Changed
+- dws_sales 抽取与清洗补充门店编码、云仓标识与别名字段处理。来源：[etl_dws_sales.py](etl_dws_sales.py#L28-L100)
+
+#### Docs
+- 新增 Agent 交接日志与待办追踪文档。来源：[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md#L1-L44)、[docs/TODO_ISSUES.md](docs/TODO_ISSUES.md#L1-L45)
+
+
 ## 2026-02-26
 
 ### v0.6.3 — ODS双水位与质检链路（2026-02-26）
@@ -98,3 +115,4 @@
   - `docs/SQL开发手册.md`
   - `docs/mysql_data_dictionary.md`
   - `README.md` 增加 ETL 步骤说明（含 `dabo_ready`）与 CHANGELOG 链接
+
