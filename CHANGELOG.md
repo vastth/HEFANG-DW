@@ -3,6 +3,37 @@
 > 说明：按日期与版本整理，条目按“Added / Changed / Fixed / Database / Docs”分类。
 
 
+## 2026-03-04
+
+### v0.7.0 — everything-claude-code 四层架构扩展（2026-03-04）
+
+#### Added
+- 新增 3 个 ETL/数仓专属 Subagent（`.claude/agents/`）：
+  - `etl-auditor`：ETL代码审计专家（只读，sonnet）
+  - `doc-syncer`：文档同步执行者（读写，haiku）
+  - `db-inspector`：数据库结构探查专家（只读 + MySQL MCP，haiku）
+- 新增 5 个项目专属 Skill（`.claude/skills/`）：
+  - `/handoff`：一键写入 AGENT_HANDOFF.md 交接记录
+  - `/quality-check`：全套质检（连通性+ETL空跑+数据质量+文档同步）
+  - `/doc-sync`：文档同步检查与自动修复
+  - `/etl-audit`：ETL 完整审计，输出带优先级的发现清单
+  - `/schema-snap`：数据库结构快照 + 字典漂移检测
+- 新增本地 MCP 配置约定（`.mcp.json`，已忽略不提交）：MySQL + Oracle 双向 MCP（只读，env var 引用）
+  - MySQL：`@benborla29/mcp-server-mysql`，直连何方数仓
+  - Oracle：`mcp-server-oracle`，直连伯俊 ERP
+- 新增 PostToolUse Hook：修改 `etl_*.py` 或 `SQL/*.sql` 后自动提醒同步文档
+
+#### Changed
+- `.claude/settings.json`：新增 `hooks.PostToolUse` 节点
+- `.claude/CLAUDE.md`：新增第 8 章「Agent 与 Skill 快速索引」
+- `.gitignore`：追加 `.mcp.json`（含 env var 引用，不提交）
+
+#### Docs
+- `CLAUDE.md` 第 8 章新增完整的 Subagents/Skills/Hooks/MCP 索引表
+
+参考：架构模式来源 [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code)
+
+
 ## 2026-03-03
 
 ### v0.6.4 — 文档审计与交接工具补齐（2026-03-03）
