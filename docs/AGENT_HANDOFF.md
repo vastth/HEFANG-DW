@@ -27,6 +27,34 @@
 
 ---
 
+### [2026-03-04 17:31] · GitHub Copilot · 提交 Claude Code 架构文件
+
+**摘要**：提交 .claude 代理/技能与配置文件
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.claude/CLAUDE.md` | 修改 | 新增第 8 章「Agent 与 Skill 快速索引」|
+| `.claude/settings.json` | 修改 | 新增 PostToolUse Hook 配置 |
+| `.claude/agents/etl-auditor.md` | 新增 | ETL 代码审计专家子代理 |
+| `.claude/agents/doc-syncer.md` | 新增 | 文档同步执行者子代理 |
+| `.claude/agents/db-inspector.md` | 新增 | 数据库结构探查子代理 |
+| `.claude/skills/doc-sync/SKILL.md` | 新增 | 文档同步检查与修复技能 |
+| `.claude/skills/etl-audit/SKILL.md` | 新增 | ETL 完整审计技能 |
+| `.claude/skills/handoff/SKILL.md` | 新增 | 交接日志写入技能 |
+| `.claude/skills/quality-check/SKILL.md` | 新增 | 全套质检技能 |
+| `.claude/skills/schema-snap/SKILL.md` | 新增 | 结构快照技能 |
+| `.gitignore` | 修改 | 忽略 .mcp.json |
+
+**Copilot 接棒须知**：
+- 本次提交为 Claude Code 架构文件入库
+
+**未完成项**：
+- [x] 已完成
+
+---
+
 ### [2026-03-04 17:11] · GitHub Copilot · 审计修正与架构同步
 
 **摘要**：补齐交接清单并修正日志与架构文档表述
@@ -45,6 +73,7 @@
 
 **未完成项**：
 - [x] 已完成
+
 
 ---
 
@@ -74,6 +103,7 @@
 
 **未完成项**：
 - [ ] 验证 MySQL MCP 是否能正常连接（/mcp 查看状态）；如需 Oracle MCP，安装 uv 并定义 ORACLE_CONNECTION_STRING 环境变量；在下次 ETL 修改后验证 PostToolUse Hook 是否正常触发提醒
+
 
 
 ---
@@ -116,6 +146,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 17:32] · GitHub Copilot · 复跑审计并清零中风险
@@ -139,6 +170,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 17:20] · GitHub Copilot · 复跑审计后修正噪音
@@ -157,6 +189,7 @@
 
 **未完成项**：
 - [ ] 如继续降噪可再优化docs_only低风险词表
+
 
 
 
@@ -187,6 +220,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 17:09] · GitHub Copilot · 审计脚本降噪
@@ -206,6 +240,7 @@
 
 **未完成项**：
 - [ ] 如需进一步压降code_only，可继续收敛白名单词表
+
 
 
 
@@ -240,6 +275,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 16:51] · GitHub Copilot · 复跑审计
@@ -257,32 +293,6 @@
 
 **未完成项**：
 - [ ] 如需审计全绿，需在审计脚本增加白名单或降级策略
-
-
-
-
-
-
-
-
-
----
-
-### [2026-03-02 16:48] · GitHub Copilot · 审计规则同步
-
-**摘要**：补充结构字段入契约与未填充标注规则
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/数据仓库与ETL手册.md` | 修改 | 审计闭环新增字段入契约规则 |
-
-**Copilot 接棒须知**：
-- 与DATA_CONTRACTS字段补回要求一致
-
-**未完成项**：
-- [ ] 需要时复跑审计脚本确认风险
 
 
 

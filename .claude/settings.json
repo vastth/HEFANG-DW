@@ -16,5 +16,19 @@
       "Bash(git reset --hard*)"
     ]
   },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "检查 tool_input.file_path 或 tool_input.new_string 中涉及的文件路径。规则：\n1. 如果修改的是 etl_*.py 文件（路径中包含 etl_ 且以 .py 结尾），在回复末尾追加：\n⚠️ 已修改 ETL 脚本，请完成本次变更后运行 /doc-sync 同步文档，并使用 /handoff 写入交接记录。\n2. 如果修改的是 SQL/ 目录下的 .sql 文件，在回复末尾追加：\n⚠️ 已修改 SQL 文件，如涉及表结构变更请同步更新 docs/MYSQL数据字典.md 和 docs/DATA_CONTRACTS.md，完成后使用 /handoff 写入交接记录。\n3. 其他文件：静默返回，不输出任何内容。",
+            "model": "haiku"
+          }
+        ]
+      }
+    ]
+  },
   "env": {}
 }

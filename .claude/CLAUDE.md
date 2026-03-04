@@ -192,3 +192,35 @@ ETL: dws_sales 新增双水位回填逻辑
 
 参考：CHANGELOG.md v0.6.3
 ```
+
+---
+
+## 8. Agent 与 Skill 快速索引
+
+### Subagents（`.claude/agents/`）
+
+| Agent | 激活时机 | 工具范围 |
+|-------|---------|---------|
+| `etl-auditor` | 「审计ETL」「检查口径」「核实字段映射」 | 只读（Read/Grep/Glob）|
+| `doc-syncer` | 「同步文档」「更新字典」「文档对齐」 | 读写（含 Write/Edit）|
+| `db-inspector` | 「检查表结构」「快照对比」 | 只读 + MySQL MCP（需配置）|
+
+### Skills（斜杠命令）
+
+| 命令 | 功能 | 典型使用时机 |
+|------|------|------------|
+| `/handoff [摘要]` | 写入 AGENT_HANDOFF.md 交接记录 | 完成一组变更后（强制）|
+| `/quality-check` | 运行连通性+ETL空跑+数据质量+文档同步全套检查 | 提交前、例行巡检 |
+| `/doc-sync` | 检查并修复文档与代码的同步差异 | 修改 ETL/SQL 后 |
+| `/etl-audit [模块]` | ETL 完整审计，输出发现清单 | 上线前、口径评审 |
+| `/schema-snap` | 数据库结构快照 + 字典漂移检测 | 每周例行、DDL 变更后 |
+
+### Hooks（自动触发）
+- 修改 `etl_*.py` 或 `SQL/*.sql` 后，自动提醒运行 `/doc-sync` 和 `/handoff`
+
+### MCP（数据库直连）
+配置文件：`.mcp.json`（不提交，env var 引用）
+- `mysql`：MySQL 数仓，只读，通过 `@benborla29/mcp-server-mysql`
+- `oracle`：Oracle ERP，只读，通过 `mcp-server-oracle`（需 `uv` 和 `ORACLE_CONNECTION_STRING` 环境变量）
+
+验证 MCP 状态：在 Claude Code 中输入 `/mcp`
