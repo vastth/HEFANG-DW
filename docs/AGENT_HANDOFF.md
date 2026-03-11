@@ -27,6 +27,42 @@
 
 ---
 
+### [2026-03-05 19:05] · GitHub Copilot · 归档 Claude Code 403 鉴权问题处置结论
+
+**摘要**：归档问题：Claude Code 报错 `Failed to authenticate / 403 forbidden / Request not allowed`；处理方式为配置 `settings.local.json`。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/AGENT_HANDOFF.md` | 修改 | 精简为问题与处理结论归档 |
+
+**Copilot 接棒须知**：
+- 遇到 `Failed to authenticate / 403 forbidden / Request not allowed` 时，按本项目归档结论：配置 `.claude/settings.local.json` 即可。
+
+**未完成项**：
+- [x] 已完成
+
+---
+
+### [2026-03-05 17:28] · GitHub Copilot · 固定工作区默认解释器为 base 3.13.9
+
+**摘要**：加固 VS Code 工作区解释器配置，默认指向 D:/Anaconda/python.exe
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.vscode/settings.json` | 修改 | 新增 python.pythonPath 并保留 python.defaultInterpreterPath 指向 base |
+
+**Copilot 接棒须知**：
+- 若界面仍显示 pyproject 3.13.11，需执行一次 Python: Clear Workspace Interpreter Setting 清理历史记忆
+
+**未完成项**：
+- [ ] 首次生效需用户在本机执行一次清理工作区解释器选择
+
+---
+
 ### [2026-03-04 17:31] · GitHub Copilot · 提交 Claude Code 架构文件
 
 **摘要**：提交 .claude 代理/技能与配置文件
@@ -53,6 +89,7 @@
 **未完成项**：
 - [x] 已完成
 
+
 ---
 
 ### [2026-03-04 17:11] · GitHub Copilot · 审计修正与架构同步
@@ -73,6 +110,7 @@
 
 **未完成项**：
 - [x] 已完成
+
 
 
 ---
@@ -103,6 +141,7 @@
 
 **未完成项**：
 - [ ] 验证 MySQL MCP 是否能正常连接（/mcp 查看状态）；如需 Oracle MCP，安装 uv 并定义 ORACLE_CONNECTION_STRING 环境变量；在下次 ETL 修改后验证 PostToolUse Hook 是否正常触发提醒
+
 
 
 
@@ -147,6 +186,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 17:32] · GitHub Copilot · 复跑审计并清零中风险
@@ -166,6 +206,7 @@
 
 **未完成项**：
 - [ ] 如需继续降噪可优化low级词表
+
 
 
 
@@ -195,6 +236,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 17:16] · GitHub Copilot · 审计脚本函数名降噪
@@ -214,6 +256,7 @@
 
 **未完成项**：
 - [ ] 若继续降噪可评估过滤脚本内部常量名
+
 
 
 
@@ -248,6 +291,7 @@
 
 
 
+
 ---
 
 ### [2026-03-02 16:59] · GitHub Copilot · 审计脚本规则实现
@@ -267,32 +311,6 @@
 
 **未完成项**：
 - [ ] 如需控制code_only总量波动，可后续收敛脚本术语采集范围
-
-
-
-
-
-
-
-
-
----
-
-### [2026-03-02 16:51] · GitHub Copilot · 复跑审计
-
-**摘要**：确认规则调整后差异回归情况
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `reports/docs_code_alignment.json` | 修改 | 复跑check_doc_sync输出最新差异 |
-
-**Copilot 接棒须知**：
-- 中风险回到docs_only 4项，来源于字段补回要求
-
-**未完成项**：
-- [ ] 如需审计全绿，需在审计脚本增加白名单或降级策略
 
 
 
