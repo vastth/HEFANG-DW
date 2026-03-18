@@ -1,11 +1,23 @@
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import pymysql
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from config import MYSQL_CONFIG
+
+
+def _resolve_path(path_str: str) -> Path:
+    output_path = Path(path_str)
+    if not output_path.is_absolute():
+        output_path = REPO_ROOT / output_path
+    return output_path
 
 
 def fetch_schema():
@@ -79,18 +91,16 @@ def fetch_schema():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export MySQL schema snapshot.")
+    parser = argparse.ArgumentParser(description="导出 MySQL 结构快照。")
     parser.add_argument(
         "--output",
         default="reports/snapshot_mysql_hefangdw_schema.json",
-        help=(
-            "Output JSON path (default: reports/snapshot_mysql_hefangdw_schema.json)"
-        ),
+        help="输出 JSON 路径，默认写入 reports/snapshot_mysql_hefangdw_schema.json",
     )
     args = parser.parse_args()
 
     snapshot = fetch_schema()
-    output_path = Path(args.output)
+    output_path = _resolve_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(snapshot, ensure_ascii=True, indent=2),

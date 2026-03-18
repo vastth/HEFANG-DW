@@ -32,56 +32,56 @@
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | id | bigint | NO |  |  |
-| 2 | snapshot_date | date | NO |  | 快照日期 |
-| 3 | product_id | bigint | NO |  | 商品ID |
-| 4 | sku_id | bigint | YES |  | SKU主键（M_PRODUCT_ALIAS.ID） |
-| 5 | sku_barcode | varchar(80) | YES |  | 条码 |
-| 6 | color | varchar(50) | YES |  | SKU颜色 |
-| 7 | size | varchar(50) | YES |  | SKU尺寸 |
-| 8 | product_code | varchar(80) | YES |  | 商品编码 |
-| 9 | product_name | varchar(200) | YES |  | 商品名称 |
-| 10 | category_id | int | YES |  | 类别ID |
-| 11 | category_name | varchar(50) | YES |  | 类别 |
-| 12 | property_id | int | YES |  | 性质ID |
-| 13 | property_name | varchar(50) | YES |  | 性质 |
-| 14 | series_id | int | YES |  |  |
-| 15 | series_name | varchar(100) | YES |  |  |
-| 16 | price_list | decimal(12,2) | YES | 0.00 | 吊牌价 |
-| 17 | total_qty | int | YES | 0 | 总库存 |
-| 18 | warehouse_qty | int | YES | 0 | 总仓库存 |
-| 19 | cloud_qty | int | YES | 0 | 云仓库存 |
-| 20 | sales_qty_30d | int | YES | 0 | 近30天销量（全量） |
-| 21 | sales_amt_30d | decimal(14,2) | YES | 0.00 | 近30天销售额（全量） |
-| 22 | return_qty_30d | int | YES | 0 | 近30天退货量 |
-| 23 | sales_qty_7d | int | YES | 0 | 近7天销量（全量） |
-| 24 | dabo_sales_qty_30d | int | YES | 0 | 近30天达播销量 |
-| 25 | dabo_sales_qty_7d | int | YES | 0 | 近7天达播销量 |
-| 26 | dabo_latest_date | date | YES |  | 达播最新日期（按SKU） |
-| 27 | dabo_revenue_30d | decimal(14,2) | YES | 0.00 | 近30天达播销售额 |
-| 28 | dabo_revenue_7d | decimal(14,2) | YES | 0.00 | 近7天达播销售额 |
-| 29 | natural_sales_qty_30d | int | YES | 0 | 近30天自然销量（全量-达播） |
-| 30 | natural_sales_qty_7d | int | YES | 0 | 近7天自然销量（全量-达播） |
-| 31 | natural_revenue_30d | decimal(14,2) | YES | 0.00 | 近30天自然销售额（全量-达播） |
-| 32 | natural_revenue_7d | decimal(14,2) | YES | 0.00 | 近7天自然销售额（全量-达播） |
-| 33 | daily_avg_sales | decimal(10,2) | YES |  | 日均销量30天（全量） |
-| 34 | daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天日均销量（全量） |
-| 35 | natural_daily_avg_sales | decimal(10,2) | YES | 0.00 | 近30天自然日均销量 |
-| 36 | natural_daily_avg_sales_7d | decimal(10,2) | YES | 0.00 | 近7天自然日均销量 |
-| 37 | sales_velocity | decimal(5,2) | YES |  | 销售加速度（全量） |
-| 38 | natural_sales_velocity | decimal(5,2) | YES |  | 自然销售加速度 |
-| 39 | sales_trend | varchar(20) | YES |  | 销售趋势（全量） |
-| 40 | turnover_days | decimal(10,1) | YES |  | 周转天数 |
-| 41 | inventory_status | varchar(20) | YES |  | 库存状态 |
-| 42 | status_priority | int | YES |  | 状态优先级 |
-| 43 | sku_grade | char(1) | YES |  | SABC分级 |
+| 2 | snapshot_date | date | YES |  | 快照日期 |
+| 3 | product_id | bigint | YES |  | 商品ID |
+| 4 | product_code | varchar(80) | YES |  | 商品编码 |
+| 5 | product_name | varchar(200) | YES |  | 商品名称 |
+| 6 | category_id | int | YES |  | 类别ID |
+| 7 | category_name | varchar(50) | YES |  | 类别 |
+| 8 | property_id | int | YES |  | 性质ID |
+| 9 | property_name | varchar(50) | YES |  | 性质 |
+| 10 | series_id | int | YES |  |  |
+| 11 | series_name | varchar(100) | YES |  |  |
+| 12 | price_list | decimal(12,2) | YES |  | 吊牌价 |
+| 13 | total_qty | int | YES |  | 总库存 |
+| 14 | warehouse_qty | int | YES |  | 总仓库存 |
+| 15 | cloud_qty | int | YES |  | 云仓库存 |
+| 16 | purchase_rem_qty | int | YES |  | 采购欠数/在途库存 |
+| 17 | sales_qty_30d | int | YES |  | 近30天销量（全量） |
+| 18 | sales_amt_30d | decimal(14,2) | YES |  | 近30天销售额（全量） |
+| 19 | sales_qty_7d | int | YES |  | 近7天销量（全量） |
+| 20 | dabo_sales_qty_30d | int | NO | 0 | 近30天达播销量 |
+| 21 | dabo_sales_qty_7d | int | NO | 0 | 近7天达播销量 |
+| 22 | dabo_latest_date | date | YES |  | 达播最新日期（按SKU） |
+| 23 | dabo_revenue_30d | decimal(14,2) | NO | 0.00 | 近30天达播销售额 |
+| 24 | dabo_revenue_7d | decimal(14,2) | NO | 0.00 | 近7天达播销售额 |
+| 25 | natural_sales_qty_30d | int | NO | 0 | 近30天自然销量（全量-达播） |
+| 26 | natural_sales_qty_7d | int | NO | 0 | 近7天自然销量（全量-达播） |
+| 27 | natural_revenue_30d | decimal(14,2) | NO | 0.00 | 近30天自然销售额（全量-达播） |
+| 28 | natural_revenue_7d | decimal(14,2) | NO | 0.00 | 近7天自然销售额（全量-达播） |
+| 29 | return_qty_30d | int | YES |  | 近30天退货量 |
+| 30 | return_amount_30d | decimal(14,2) | YES |  |  |
+| 31 | daily_avg_sales | decimal(10,2) | YES |  | 日均销量30天（全量） |
+| 32 | daily_avg_sales_7d | decimal(10,2) | YES |  | 近7天日均销量（全量） |
+| 33 | natural_daily_avg_sales | decimal(10,2) | NO | 0.00 | 近30天自然日均销量 |
+| 34 | natural_daily_avg_sales_7d | decimal(10,2) | NO | 0.00 | 近7天自然日均销量 |
+| 35 | sales_velocity | decimal(5,2) | YES |  | 销售加速度（全量） |
+| 36 | natural_sales_velocity | decimal(5,2) | YES |  | 自然销售加速度 |
+| 37 | turnover_days | decimal(10,1) | YES |  | 周转天数 |
+| 38 | inventory_status | varchar(20) | YES |  | 库存状态 |
+| 39 | sku_grade | char(1) | YES |  | SABC分级 |
+| 40 | suggest_qty | int | YES |  | 建议补货数量 |
+| 41 | etl_time | datetime | YES |  | ETL时间戳 |
+| 42 | sales_trend | varchar(20) | YES |  | 销售趋势（全量） |
+| 43 | status_priority | int | YES |  | 状态优先级 |
 | 44 | sales_rank | int | YES |  | 销售排名 |
 | 45 | sales_ratio | decimal(5,2) | YES |  | 销售占比 |
 | 46 | cumulative_ratio | decimal(5,2) | YES |  | 累计占比 |
-| 47 | suggest_qty | int | YES | 0 | 建议补货数量 |
-| 48 | created_at | datetime | YES | CURRENT_TIMESTAMP |  |
-| 49 | etl_time | datetime | YES |  | ETL时间戳 |
-| 50 | purchase_rem_qty | int | YES | 0 | 采购欠数/在途库存 |
-| 51 | return_amount_30d | decimal(14,2) | YES | 0.00 |  |
+| 47 | created_at | datetime | YES |  |  |
+| 48 | sku_id | bigint | YES |  | SKU主键（M_PRODUCT_ALIAS.ID） |
+| 49 | sku_barcode | varchar(80) | YES |  | 条码（M_PRODUCT_ALIAS.NO） |
+| 50 | color | varchar(50) | YES |  | SKU颜色 |
+| 51 | size | varchar(50) | YES |  | SKU尺寸 |
 
 ## ads_sales_summary
 - 描述: 销售汇总应用表
@@ -140,7 +140,7 @@
 ## dim_category
 - 描述: 类别维度表
 - 状态: 已实现（数据库结构快照）
-- 证据: reports/mysql_schema_snapshot.json（2026-02-28 22:32:28）
+- 证据: reports/snapshot_mysql_hefangdw_schema.json（2026-03-01 01:41:36）
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
@@ -152,16 +152,16 @@
 
 ## dim_channel
 - 描述: 电商渠道维度表
-- 状态: 已实现（数据库结构快照）
+- 状态: 已实现（ETL + 建表脚本）；目标库现存数据待验证
 - 证据: reports/snapshot_mysql_hefangdw_schema.json（2026-03-01 01:41:36）
-- 说明: 当前无对应ETL脚本，字段来自数据库结构快照，未在代码实现写入。来源：[tools/snapshot_mysql_hefangdw_schema.py](tools/snapshot_mysql_hefangdw_schema.py#L1-L24)
+- 说明: 仓库内已提供 [etl_dim_channel.py](etl_dim_channel.py#L1-L131) 与 [SQL/create_dim_channel.sql](SQL/create_dim_channel.sql#L1-L11)，来源为 Oracle `O2O_RETAIL_CHANNEL`；当前目标字段名为 `WING_CODE`，直接映射源表 `WING_CODE`，`CODE` 仅保留为渠道编码；但 [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md#L55-L61) 记录此前未执行真实 ETL 写库，因此仍需验证目标库数据是否已完成回填。
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | channel_id | int | NO |  | 渠道ID |
 | 2 | channel_name | varchar(50) | NO |  | 渠道名称 |
 | 3 | channel_code | varchar(20) | YES |  | 渠道编码 |
-| 4 | store_code | varchar(40) | YES |  | 对应店仓编码 |
+| 4 | WING_CODE | varchar(40) | YES |  | 对应店仓编码 |
 | 5 | is_main | tinyint | YES | 0 | 是否主要渠道 |
 | 6 | platform_type | varchar(20) | YES |  | 平台类型 |
 | 7 | is_active | char(1) | YES | Y | 是否有效 |
@@ -398,3 +398,7 @@
 | v1.3 | 2026-02-28 | 标注dim_category/dim_channel为已实现 |
 | v1.4 | 2026-02-28 | 标注year/net字段与etl_log未在代码实现写入 |
 | v1.5 | 2026-03-01 | 更新dim_channel快照证据并标注未在代码实现 |
+| v1.6 | 2026-03-16 | 修正 dim_category 快照证据路径 |
+| v1.7 | 2026-03-18 | 补充 dim_channel ETL 来源，并标注目标库现存数据待验证 |
+| v1.8 | 2026-03-18 | 将 dim_channel 店仓字段重命名为 WING_CODE 并对齐 Oracle 来源 |
+| v1.9 | 2026-03-18 | 按最新快照修正 ads_inventory_health 字段顺序、可空性与默认值 |

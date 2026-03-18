@@ -56,7 +56,7 @@
 │  │ DWS汇总层: dws_sales_daily | dws_inventory_daily     │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ DIM维度层: dim_product | dim_store | dim_sku         │   │
+│  │ DIM维度层: dim_product | dim_store | dim_channel | dim_sku │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                            ▲
@@ -97,6 +97,7 @@ hefang_dw/
 ├── etl_dim_product.py           # 商品维度ETL
 ├── etl_dim_sku.py               # SKU维度ETL
 ├── etl_dim_store.py             # 店仓维度ETL
+├── etl_dim_channel.py           # 渠道维度ETL
 ├── etl_dws_sales.py             # 销售明细ETL（SKU粒度）
 ├── etl_dws_inventory.py         # 库存明细ETL（SKU粒度）
 ├── etl_ads_health.py            # 库存健康度ETL
@@ -112,7 +113,15 @@ hefang_dw/
 │   ├── check_dws_inventory.py   # 库存专项检查
 │   ├── check_ods_incremental.py # ODS对账（主表/明细）
 │   ├── check_ods_retailitem_quality.py # ODS明细质量对账（双通道拆分）
-│   └── export_ads.py            # ADS数据导出
+│   ├── export_ads.py            # ADS数据导出
+│   ├── query_data.py            # 通用只读查数与导出
+│   └── snapshot_*_schema.py     # MySQL / Oracle 结构快照
+├── scripts/                     # 运维与协作脚本
+│   ├── check_doc_sync.py        # 文档同步审计
+│   ├── doctor.ps1               # 环境自检
+│   ├── log_agent_action.py      # Agent交接记录写入
+│   └── log_agent_lesson.py      # Agent经验台帐写入
+│
 │
 ├── notebooks/                   # 数据探索Jupyter笔记本（非运行链路）
 │   ├── explore_M_IN_OUT_.ipynb
@@ -160,33 +169,30 @@ pip install python-oracledb pymysql pandas openpyxl
 
 ### 2. 配置数据库连接
 
-编辑 [config.py](config.py)，填入数据库信息：
+优先通过环境变量配置数据库连接；`config.py` 默认读取以下变量：
 
-```python
+```powershell
 # Oracle源数据库（伯俊ERP）
-ORACLE_CONFIG = {
-   'user': 'your_username',
-   'password': 'your_password',
-   'host': 'your_host',
-   'port': 1521,
-   'service_name': 'orcl'
-}
+$env:ORACLE_USER = 'your_username'
+$env:ORACLE_PASSWORD = 'your_password'
+$env:ORACLE_HOST = 'your_host'
+$env:ORACLE_PORT = '1521'
+$env:ORACLE_SERVICE = 'orcl'
 
 # MySQL目标数仓
-MYSQL_CONFIG = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'root',
-    'password': 'your_password',
-    'database': 'hefang_dw',
-    'charset': 'utf8mb4'
-}
+$env:MYSQL_HOST = 'localhost'
+$env:MYSQL_PORT = '3306'
+$env:MYSQL_USER = 'root'
+$env:MYSQL_PASSWORD = 'your_password'
+$env:MYSQL_DB = 'hefang_dw'
 ```
+
+如需查看默认配置键名，可参考 [config.py](config.py)。
 
 ### 3. 测试连接
 
 ```bash
-python test_connection.py
+python tools/test_connection.py
 ```
 
 预期输出：
@@ -194,6 +200,30 @@ python test_connection.py
 ✅ Oracle连接成功！
 ✅ MySQL连接成功！
 ```
+
+### 3.2 只读查数与导出
+
+以下工具都支持从任意工作目录直接运行，默认按仓库根目录解析输出路径：
+
+```bash
+# 查看内置查数模板
+python tools/query_data.py --list-templates
+
+# MySQL：最近 7 天销售排行
+python tools/query_data.py --template mysql_sales_rank_7d
+
+# Oracle：最近 7 天零售单据统计
+python tools/query_data.py --source oracle --template oracle_retail_docs_7d
+
+# 导出最新库存健康度快照
+python tools/export_ads.py
+```
+
+说明：
+- `tools/query_data.py` 只支持只读查询，适合临时查数、样本导出与自由分析。
+- `tools/export_ads.py` 仅导出 `ads_inventory_health`，不扩展其他业务逻辑。
+- `tools/snapshot_mysql_hefangdw_schema.py` 与 `tools/snapshot_oracle_bosnds3_schema.py` 生成的是结构快照，只反映表、字段、类型和注释，不查看实际数据值。
+- 若本次排障形成可复用结论，或你明确指出业务逻辑/字段语义错误，可用 `python scripts/log_agent_lesson.py ...` 将经验写入 `docs/AGENT_LESSONS.md`。
 
 ### 3.1 告警与快速测试（新增）
 
@@ -206,7 +236,7 @@ python test_connection.py
    - `ETL_RETRY_SLEEP`：可选，覆盖重试间隔秒数（默认 60）。
 
 - 消息发送策略：
-   - 成功：7 个 ETL 步骤全部完成后，发送“成功摘要”。
+   - 成功：8 个 ETL 步骤全部完成后，发送“成功摘要”。
    - 失败：重试结束或命中不可重试错误后，发送“失败摘要”（同一模板）。
    - 统一模板字段：执行时间、总耗时、成功/警告/失败计数、步骤明细（状态/耗时/关键指标）。
 
@@ -271,13 +301,14 @@ python run_etl.py
 
 执行流程：
 ```
-[1/7] dim_product (商品维度) ✅
-[2/7] dim_sku (SKU维度) ✅
-[3/7] dim_store (店仓维度) ✅
-[4/7] dws_sales_daily (销售明细) ✅
-[5/7] dws_inventory_daily (库存明细) ✅
-[6/7] dabo_ready (达播数据就绪检查/回填) ✅
-[7/7] ads_inventory_health (库存健康度) ✅
+[1/8] dim_product (商品维度) ✅
+[2/8] dim_sku (SKU维度) ✅
+[3/8] dim_store (店仓维度) ✅
+[4/8] dim_channel (渠道维度) ✅
+[5/8] dws_sales_daily (销售明细) ✅
+[6/8] dws_inventory_daily (库存明细) ✅
+[7/8] dabo_ready (达播数据就绪检查/回填) ✅
+[8/8] ads_inventory_health (库存健康度) ✅
 ```
 
 ### 4.1 ODS同步（默认增量，可切全量）
@@ -307,6 +338,7 @@ python run_ods.py --backfill-days 14 --window-days 1
 SELECT 'dim_product' AS 表名, COUNT(*) AS 记录数 FROM dim_product
 UNION ALL SELECT 'dim_sku', COUNT(*) FROM dim_sku
 UNION ALL SELECT 'dim_store', COUNT(*) FROM dim_store
+UNION ALL SELECT 'dim_channel', COUNT(*) FROM dim_channel
 UNION ALL SELECT 'dws_sales_daily', COUNT(*) FROM dws_sales_daily
 UNION ALL SELECT 'dws_inventory_daily', COUNT(*) FROM dws_inventory_daily
 UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
@@ -369,6 +401,21 @@ UNION ALL SELECT 'ads_inventory_health', COUNT(*) FROM ads_inventory_health;
 | created_at | 创建时间 | ETL运行时间 |
 
 **源表**：Oracle `C_STORE`  
+**更新策略**：每日全量覆盖
+
+#### `dim_channel` - 渠道维度表
+| 字段 | 说明 | 备注 |
+|------|------|------|
+| channel_id | 渠道ID | 主键 |
+| channel_name | 渠道名称 | Oracle O2O_RETAIL_CHANNEL.NAME |
+| channel_code | 渠道编码 | Oracle O2O_RETAIL_CHANNEL.CODE |
+| WING_CODE | 对应店仓编码 | Oracle O2O_RETAIL_CHANNEL.WING_CODE |
+| is_main | 是否主要渠道 | 1/0 |
+| platform_type | 平台类型 | 天猫/京东/抖音/小红书/视频号/唯品会/得物/其他 |
+| is_active | 是否有效 | Y/N |
+| created_at | 创建时间 | ETL运行时间 |
+
+**源表**：Oracle `O2O_RETAIL_CHANNEL`  
 **更新策略**：每日全量覆盖
 
 ### 明细层 (DWS)
@@ -530,10 +577,10 @@ python etl_ads_health.py
 
 ```bash
 # 全面数据质量检查
-python check_data.py
+python tools/check_data.py
 
 # 库存专项检查
-python check_dws_inventory.py
+python tools/check_dws_inventory.py
 
 # ODS对账（主表/明细）
 python tools/check_ods_incremental.py --days 7
@@ -553,7 +600,7 @@ python tools/check_ods_retailitem_quality.py --days 7 --as-of "2026-02-26 17:11:
 
 ```bash
 # 导出库存健康度到Excel
-python export_ads.py
+python tools/export_ads.py
 
 # 导出文件名前缀（与脚本一致）
 # ads_inventory_health_
@@ -675,6 +722,7 @@ hotfix/* - 紧急修复
 | v2.3 | 2026-02-28 | 调整净销量/净销售额字段展示说明 | tianxiaoyu911@gmail.com |
 | v2.4 | 2026-02-28 | 补充代码字段命名对照表 | tianxiaoyu911@gmail.com |
 | v2.5 | 2026-02-28 | 增加审计前询问是否执行快照脚本 | tianxiaoyu911@gmail.com |
+| v2.6 | 2026-03-18 | 将 dim_channel 店仓字段重命名为 WING_CODE 并对齐 Oracle 来源 | tianxiaoyu911@gmail.com |
 
 ---
 
@@ -683,8 +731,8 @@ hotfix/* - 紧急修复
 ### 常见问题
 
 **Q1: Oracle连接失败？**
-- 检查Instant Client是否安装
-- 验证`config.py`中的连接配置
+- 默认使用 `python-oracledb` thin 模式，无需安装 Instant Client
+- 检查 `ORACLE_USER` / `ORACLE_PASSWORD` / `ORACLE_HOST` / `ORACLE_SERVICE` 环境变量
 - 确认网络防火墙设置
 
 **Q2: ETL执行失败？**
@@ -693,7 +741,7 @@ hotfix/* - 紧急修复
 - 验证MySQL数据库权限
 
 **Q3: 数据不一致？**
-- 运行`check_data.py`进行质量检查
+- 运行`tools/check_data.py`进行质量检查
 - 对比源表与目标表记录数
 - 查看[ETL业务逻辑说明](docs/ETL业务逻辑说明.md)了解各脚本逻辑
 

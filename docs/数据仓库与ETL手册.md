@@ -50,7 +50,7 @@
 | 层级 | 名称 | 说明 | 示例表 |
 |------|------|------|--------|
 | ODS | 原始数据层 | 1:1复制源表（保留） | ods_m_retail, ods_fa_storage |
-| DIM | 维度层 | 维度表 | dim_product, dim_product_attr, dim_store, dim_sku, dim_date |
+| DIM | 维度层 | 维度表 | dim_product, dim_product_attr, dim_store, dim_channel, dim_sku, dim_date |
 | DWD | 明细事实层 | 清洗后的明细（保留） | 暂无（DWD层未在代码实现） |
 | DWS | 汇总事实层 | 按主题汇总 | dws_sales_daily, dws_inventory_daily |
 | ADS | 应用层 | 面向应用 | ads_inventory_health, ads_dabo_daily_sales（已实现）；ads_daily_report/ads_sales_summary（规划，未在代码实现） |
@@ -140,6 +140,20 @@ CREATE TABLE dim_store (
     is_active       CHAR(1),
     created_at      DATETIME,
     updated_at      DATETIME
+);
+```
+
+**dim_channel（渠道维度）**
+```sql
+CREATE TABLE dim_channel (
+    channel_id      INT PRIMARY KEY,
+    channel_name    VARCHAR(50),
+    channel_code    VARCHAR(20),
+    WING_CODE       VARCHAR(40),
+    is_main         TINYINT,
+    platform_type   VARCHAR(20),
+    is_active       CHAR(1),
+    created_at      DATETIME
 );
 ```
 
@@ -276,6 +290,7 @@ SKU信息 ← dim_sku
 | dim_product_attr | M_ATTRIBUTESETINSTANCE（通过M_PRODUCT_ALIAS关联） | 全量覆盖(replace) | 每个商品取第一个SKU的颜色/尺寸 |
 | dim_sku | M_PRODUCT_ALIAS + M_ATTRIBUTESETINSTANCE | 全量覆盖 | SKU信息可能改 |
 | dim_store | C_STORE + C_AREA | 全量覆盖 | 门店可能新增 |
+| dim_channel | O2O_RETAIL_CHANNEL | 全量覆盖 | 电商渠道与店仓映射 |
 | dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天（全渠道、全品类；业务筛选下沉ADS） |
 | dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存（总仓+云仓，不做主销品类过滤） |
 | ads_inventory_health | MySQL内计算 | 重新计算 | 基于dws层 |
@@ -313,11 +328,12 @@ SKU信息 ← dim_sku
 03:05  同步dim_product（约3分钟）
 03:08  同步dim_sku（约1分钟）
 03:10  同步dim_store（约1分钟）
-03:12  同步dws_sales_daily（智能判断）（约5分钟）
-03:17  同步dws_inventory_daily（约10分钟）
-03:25  达播数据就绪检查/回填（当日）
-03:27  计算ads_inventory_health（约5分钟）
-03:32  ETL结束
+03:11  同步dim_channel（约1分钟）
+03:13  同步dws_sales_daily（智能判断）（约5分钟）
+03:18  同步dws_inventory_daily（约10分钟）
+03:28  达播数据就绪检查/回填（当日）
+03:30  计算ads_inventory_health（约5分钟）
+03:35  ETL结束
 06:00  Tableau数据源刷新
 实时  达播CSV监听（例行/紧急目录）
 ```
@@ -643,3 +659,4 @@ ETL_RETRY_SLEEP = 60  # 重试间隔秒数
 | v3.0 | 2026-03-02 | 增加未填充字段提醒项 non-blocking 规则 |
 | v3.1 | 2026-03-02 | 增加审计元术语自过滤降噪说明 |
 | v3.2 | 2026-03-02 | 增加仅过滤审计脚本内部函数名策略 |
+| v3.3 | 2026-03-18 | 新增 dim_channel 维度设计与主流水线时序 |

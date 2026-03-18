@@ -27,6 +27,16 @@
             "model": "haiku"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "在本次修改完成后，执行一次简短复盘：\n1. 是否出现了可复用的坑，例如字段不存在、配置格式错误、路径假设错误、环境差异、用户纠正的业务口径？\n2. 如果有，必须在结束任务前补一条经验台帐到 docs/AGENT_LESSONS.md，并优先使用 python scripts/log_agent_lesson.py 写入。\n3. 如果该经验与当前仓库强相关，还应同步写入 repo memory，避免下次重复犯错。\n4. 若用户明确指出“业务逻辑不对/字段语义不对/SQL口径不对”，必须将其视为高优先级经验，记录来源为 user-feedback。",
+            "model": "haiku"
+          }
+        ]
       }
     ]
   },

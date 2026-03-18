@@ -3,6 +3,58 @@
 > 说明：按日期与版本整理，条目按“Added / Changed / Fixed / Database / Docs”分类。
 
 
+## 2026-03-18
+
+### v0.7.5 — 经验台帐与复盘机制（2026-03-18）
+
+#### Added
+- 新增 `scripts/log_agent_lesson.py`，用于将排障结论、业务纠错与字段语义修正写入经验台帐。
+- 新增 `docs/AGENT_LESSONS.md`，作为共享的 Agent 经验台帐。
+- 新增 `.opencode/commands/lesson.md`，为 OpenCode 提供手动经验落盘入口。
+
+#### Changed
+- `.claude/settings.json` 增加经验复盘提示型 Hook，要求在形成可复用经验后落盘台帐。
+- `.github/copilot-instructions.md`、`AGENTS.md`、`README.md`、`docs/RUNBOOK.md`、`docs/ARCHITECTURE.md` 同步经验台帐机制、命令入口与限制说明。
+
+### v0.7.4 — 只读查数工具与 tools 直跑修复（2026-03-18）
+
+#### Added
+- 新增 `tools/query_data.py`，支持 MySQL / Oracle 只读查询、模板查数、参数注入与导出。
+- 新增 `.claude/skills/data-query/SKILL.md`，统一“结构查询 / 固定对账 / 自由查数”路由规则。
+- 新增 `.claude/agents/data-query-agent.md`，补充 MCP 优先、Python 工具兜底的数据查询工作流。
+
+#### Changed
+- `tools/export_ads.py` 增加 `argparse`，支持 `--snapshot-date` 与 `--output`，仍保持 `ads_inventory_health` 只读导出。
+- `README.md`、`docs/RUNBOOK.md`、`docs/ARCHITECTURE.md` 补充只读查数、结构快照与 MCP 降级说明。
+
+#### Fixed
+- `tools/snapshot_mysql_hefangdw_schema.py`、`tools/snapshot_oracle_bosnds3_schema.py`、`tools/test_connection.py`、`tools/export_ads.py` 统一改为基于 `REPO_ROOT` 解析 `config.py`、`docs/` 与 `reports/` 路径，支持任意工作目录直接运行。
+
+### v0.7.3 — dim_channel 店仓字段更名（2026-03-18）
+
+#### Changed
+- `etl_dim_channel.py` 将 `dim_channel` 目标字段更名为 `WING_CODE`，并直接映射 Oracle `O2O_RETAIL_CHANNEL.WING_CODE`。
+- `test_etl_automation.py` 将 `dim_channel` 自动化校验改为核对 `WING_CODE='DS001'`。
+- `SQL/create_dim_channel.sql` 修正目标字段名为 `WING_CODE`，并新增现网迁移脚本 `SQL/alter_dim_channel_rename_store_code_to_wing_code.sql`。
+
+#### Docs
+- 更新 `README.md`、`docs/DATA_CONTRACTS.md`、`docs/ETL业务逻辑说明.md`、`docs/MYSQL数据字典.md`、`docs/数据结构与映射手册.md`、`docs/数据仓库与ETL手册.md`，统一 `dim_channel` 目标字段名为 `WING_CODE`。
+
+### v0.7.2 — dim_channel 血缘补齐（2026-03-18）
+
+#### Added
+- 新增 `etl_dim_channel.py`，将 Oracle `O2O_RETAIL_CHANNEL` 全量同步到 MySQL `dim_channel`。
+- 新增 `SQL/create_dim_channel.sql`，补齐 `dim_channel` 建表脚本。
+
+#### Changed
+- `run_etl.py` 主流水线由 7 步扩展为 8 步，新增 `dim_channel` 同步步骤。
+- `config.py` 新增 `dim_channel` 任务显示名。
+- `test_etl_automation.py` 新增 `dim_channel` 自动化校验。
+
+#### Docs
+- 更新 `README.md`、`docs/ARCHITECTURE.md`、`docs/DATA_CONTRACTS.md`、`docs/MYSQL数据字典.md`、`docs/数据结构与映射手册.md`、`docs/数据仓库与ETL手册.md`、`docs/ETL业务逻辑说明.md`、`docs/TODO_ISSUES.md`，关闭 P1-001。
+
+
 ## 2026-03-04
 
 ### v0.7.0 — everything-claude-code 四层架构扩展（2026-03-04）

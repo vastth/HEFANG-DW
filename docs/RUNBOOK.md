@@ -25,14 +25,7 @@ python -c "import oracledb, pandas, sqlalchemy, pymysql; print('OK')"
 
 ### 1.2 环境变量配置
 
-复制模板并填写真实凭据：
-
-```powershell
-# 复制模板（不要提交 .env 文件）
-Copy-Item .env.example .env
-```
-
-或直接设置 User 级别永久环境变量（推荐，避免 .env 文件风险）：
+`.env.example` 仅作为变量清单参考；当前脚本默认不自动加载 `.env` 文件。推荐直接设置 User 级别永久环境变量：
 
 ```powershell
 # Oracle（伯俊 ERP）
@@ -84,13 +77,17 @@ $env:ETL_MAX_RETRIES=1; $env:ETL_CONN_TEST=1; python run_etl.py --conn-test
 
 ```powershell
 # 增量同步（生产日常，使用双水位）
-python run_ods.py --mode incremental
+python run_ods.py
 
 # 全量覆盖（首次初始化或数据修复用）
-python run_ods.py --mode full
+python run_ods.py --full
+
+# 跳过自动质量校验
+python run_ods.py --skip-qc
 
 # 仅执行质量校验（不触发同步）
-python run_ods.py --mode qc
+python tools/check_ods_incremental.py
+python tools/check_ods_retailitem_quality.py
 ```
 
 ### 2.3 单步 ETL 调试
@@ -141,14 +138,95 @@ python tools/snapshot_oracle_bosnds3_schema.py
 python tools/export_ads.py
 ```
 
-### 2.6 文档审计
+### 2.6 MCP 与只读查数
+
+推荐顺序：MCP 优先，只读执行；若本地未配置 MCP 或连通失败，再降级到 Python 工具。
+
+```powershell
+# 查看内置查询模板
+python tools/query_data.py --list-templates
+
+# MySQL：最近 7 天销售排行
+python tools/query_data.py --template mysql_sales_rank_7d
+
+# Oracle：最近 7 天零售单据统计
+python tools/query_data.py --source oracle --template oracle_retail_docs_7d
+
+# 自由查数并导出 JSON
+python tools/query_data.py --sql "SELECT snapshot_date, product_code, total_qty FROM ads_inventory_health WHERE snapshot_date = :dt" --param dt=20260318 --output json --output-path reports/query_result_ads_sample.json
+
+# 导出指定快照的 ADS 数据
+python tools/export_ads.py --snapshot-date 20260318 --output reports/output.xlsx
+```
+
+结构快照命令：
+
+```powershell
+python tools/snapshot_mysql_hefangdw_schema.py --output reports/snapshot_mysql_hefangdw_schema.json
+python tools/snapshot_oracle_bosnds3_schema.py --output reports/snapshot_oracle_bosnds3_schema.json
+```
+
+MCP 推荐配置片段：
+
+```json
+{
+    "mcpServers": {
+        "mysql": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@benborla29/mcp-server-mysql"
+            ],
+            "env": {
+                "MYSQL_HOST": "${MYSQL_HOST}",
+                "MYSQL_PORT": "${MYSQL_PORT}",
+                "MYSQL_USER": "${MYSQL_USER}",
+                "MYSQL_PASS": "${MYSQL_PASSWORD}",
+                "MYSQL_DB": "${MYSQL_DB}"
+            }
+        },
+        "oracle": {
+            "command": "uvx",
+            "args": [
+                "mcp-server-oracle"
+            ],
+            "env": {
+                "ORACLE_CONNECTION_STRING": "${ORACLE_CONNECTION_STRING}",
+                "ORACLE_SCHEMA": "BOSNDS3"
+            }
+        }
+    }
+}
+```
+
+说明：
+- 本仓库不提交 `.mcp.json`，上面的片段仅供本地参考。
+- MCP 更适合交互式查数与结构探查；`tools/query_data.py` 适合作为稳定兜底和导出工具。
+- 快照脚本只输出结构信息，不读取业务数据值。
+
+### 2.7 文档审计
 
 ```powershell
 # 检查代码与文档是否同步
 python scripts/check_doc_sync.py
 ```
 
-### 2.7 验收测试
+### 2.8 经验台帐
+
+当一次排障形成可复用结论，或用户明确纠正业务逻辑/字段语义/SQL 口径时，追加一条经验记录：
+
+```powershell
+python scripts/log_agent_lesson.py --source task --category field-mapping --trigger "Oracle 查询字段报错" --mistake "误以为 M_PRODUCT 存在 NAME_CN" --correction "以 etl_dim_product.py 为准：NAME=product_code，VALUE=product_name" --evidence "etl_dim_product.py#L33" "etl_dim_product.py#L34" --prevention "涉及源表字段时，先对照 ETL 抽取 SQL、快照或字段映射文档"
+
+python scripts/log_agent_lesson.py --source user-feedback --category business-rule --trigger "用户指出销售口径错误" --mistake "误把业务常量或字段语义当作既定事实" --correction "以用户确认后的业务结论为准，并同步相关文档" --evidence "docs/业务逻辑与指标规范.md#L1" --prevention "涉及业务口径变更前先确认，不凭历史经验直接改"
+```
+
+说明：
+- 经验台帐文件是 `docs/AGENT_LESSONS.md`。
+- 与当前仓库强相关的经验，除落盘台帐外，还应同步到 repo memory。
+- `.claude/settings.json` 已增加复盘提醒 Hook，但当前仓库内没有对 GitHub Copilot 会话结束的硬触发钩子，因此仍需在任务收尾时主动判断是否要记账。
+
+### 2.9 验收测试
 
 ```powershell
 # 完整自动化验收测试（需要数据库已有数据）
@@ -165,7 +243,7 @@ pytest test_etl_automation.py -v
 | 日志文件 | 内容 | 保留策略 |
 |---------|------|---------|
 | `logs/etl_<日期>.log` | 主 ETL 流水线执行日志 | 不 git 追踪，本地保留 |
-| `logs/ods_qc_<日期>.log` | ODS 质检日志 | 不 git 追踪，本地保留 |
+| `logs/ods_qc_<日期时间>.log` | ODS 质检日志 | 不 git 追踪，本地保留 |
 | `logs/conn_test_<日期>.log` | 连通测试日志 | 不 git 追踪，本地保留 |
 
 查看最新日志：
@@ -224,7 +302,7 @@ Get-Content logs/ods_qc_*.log -Tail 50
 python tools/check_ods_incremental.py --as-of "2026-03-01 08:00:00"
 
 # 3. 如确认需要重刷，执行全量
-python run_ods.py --mode full
+python run_ods.py --full
 ```
 
 ### 4.4 ADS 库存健康度异常
@@ -291,7 +369,7 @@ SOURCE SQL/alter_ods_incremental.sql;
 -- 其余 alter_*.sql 按实际情况执行
 
 -- Step 4: 首次全量同步 ODS
--- python run_ods.py --mode full
+-- python run_ods.py --full
 
 -- Step 5: 执行主 ETL 流水线
 -- python run_etl.py
@@ -312,7 +390,8 @@ python tools/test_connection.py
 $env:ETL_CONN_TEST=1; $env:ETL_MAX_RETRIES=1; python run_etl.py --conn-test
 
 # Step 4: ODS 质检
-python run_ods.py --mode qc
+python tools/check_ods_incremental.py
+python tools/check_ods_retailitem_quality.py
 
 # Step 5: 数据质检
 python tools/check_data.py
@@ -328,3 +407,15 @@ python tools/check_ods_incremental.py
 ```
 
 **所有步骤无红色错误 = 可以上线**。
+
+---
+
+## 版本记录
+
+| 版本 | 日期 | 变更内容 |
+|------|------|----------|
+| v1.0 | 2026-03-18 | 初版运行手册 |
+| v1.1 | 2026-03-18 | 新增 MCP 与只读查数说明、结构快照与导出命令 |
+| v1.2 | 2026-03-18 | 新增经验台帐写入命令、复盘规则与 Hook 说明 |
+| v1.3 | 2026-03-18 | 将 MCP 配置示例对齐为当前实际使用的 mcpServers 格式 |
+| v1.4 | 2026-03-18 | 将查数与导出示例输出名改为通用占位，避免审计高风险误报 |

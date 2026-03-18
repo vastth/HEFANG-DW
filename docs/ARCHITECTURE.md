@@ -2,7 +2,7 @@
 
 > 本文档是仓库架构的**唯一权威来源**。修改数据层结构、调度顺序或关键配置后，必须同步更新本文件。
 >
-> 最后更新：2026-03-04（v0.7.0 对齐）
+> 最后更新：2026-03-18（v0.7.4 对齐）
 
 ---
 
@@ -27,7 +27,7 @@
                          ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                    DIM 层（维度层，每日全刷）                      │
-│  MySQL: dim_product / dim_sku / dim_store                        │
+│  MySQL: dim_product / dim_sku / dim_store / dim_channel          │
 │  来源：直接读 Oracle，每日全量覆盖                                │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
@@ -56,8 +56,8 @@
 hefang_dw/
 │
 ├── 【调度入口】
-│   ├── run_etl.py              主调度：7步流水线（dim→dws→dabo→ads）
-│   ├── run_ods.py              ODS 专项调度（全量/增量/质检）
+│   ├── run_etl.py              主调度：8步流水线（dim→dws→dabo→ads）
+│   ├── run_ods.py              ODS 专项调度（增量/全量 + 自动质检）
 │   ├── scheduled_etl.py        任务计划包装（调 run_etl.py → test_etl_automation.py）
 │   └── run_scheduled_etl.bat   Windows 任务计划触发脚本
 │
@@ -68,6 +68,7 @@ hefang_dw/
 │   ├── etl_dim_product.py      DIM: 商品维度（全刷）
 │   ├── etl_dim_sku.py          DIM: SKU 维度（全刷）
 │   ├── etl_dim_store.py        DIM: 店仓维度（全刷）
+│   ├── etl_dim_channel.py      DIM: 渠道维度（全刷）
 │   ├── etl_dws_sales.py        DWS: 销售日报（增量）
 │   ├── etl_dws_inventory.py    DWS: 库存快照（每日）
 │   └── etl_ads_health.py       ADS: 库存健康度（全量重算）
@@ -94,20 +95,24 @@ hefang_dw/
 │       └── ==线上销售月报SQL 2.0.sql    月报模板
 │
 ├── 【工具】
-│   ├── tools/export_ads.py                   导出 ADS 到 Excel
+│   ├── tools/export_ads.py                   导出 ads_inventory_health 快照
+│   ├── tools/query_data.py                   通用只读查数与导出工具
 │   ├── tools/snapshot_mysql_hefangdw_schema.py  MySQL 结构快照
 │   ├── tools/snapshot_oracle_bosnds3_schema.py  Oracle 结构快照
-│   └── scripts/check_doc_sync.py              文档代码同步审计
+│   ├── scripts/check_doc_sync.py              文档代码同步审计
+│   └── scripts/log_agent_lesson.py            Agent 经验台帐写入
 │
 ├── 【文档】
-│   └── docs/（8个中文 markdown + 3个英文 markdown）
+│   └── docs/（含 AGENT_HANDOFF / AGENT_LESSONS 等协作文档）
 │
 ├── 【配置与模板】
 │   ├── .env.example            环境变量模板
 │   ├── .claude/settings.json   Agent 默认设置（可提交）
 │   └── .claude/CLAUDE.md       Agent 协作规范（本项目）
 │   ├── .claude/agents/          Agent 子代理定义（ETL/文档/结构）
+│   ├── .claude/agents/data-query-agent.md  数据查询与对账专家
 │   ├── .claude/skills/          Skills 定义（/handoff 等）
+│   ├── .claude/skills/data-query/SKILL.md  data-query 查询路由工作流
 │   └── .mcp.json                本地 MCP 配置（不提交）
 │
 └── 【数据与输出】
@@ -131,10 +136,11 @@ hefang_dw/
 1    etl_dim_product        商品维度全刷                 重试3次→告警继续
 2    etl_dim_sku            SKU 维度全刷                 重试3次→告警继续
 3    etl_dim_store          店仓维度全刷                 重试3次→告警继续
-4    etl_dws_sales          销售增量（T-1 默认）         重试3次→告警停止
-5    etl_dws_inventory      库存快照                     重试3次→告警停止
-6    dabo_ready             达播 CSV 就绪检查            检查通过→触发回填
-7    etl_ads_health         库存健康度全量重算           重试3次→告警继续
+4    etl_dim_channel        渠道维度全刷                 重试3次→告警继续
+5    etl_dws_sales          销售增量（T-1 默认）         重试3次→告警停止
+6    etl_dws_inventory      库存快照                     重试3次→告警停止
+7    dabo_ready             达播 CSV 就绪检查            检查通过→触发回填
+8    etl_ads_health         库存健康度全量重算           重试3次→告警继续
 ─────────────────────────────────────────────────────────────────
 ```
 
@@ -153,12 +159,22 @@ python scheduled_etl.py
 ### 3.2 ODS 专项流水线（run_ods.py）
 
 ```bash
-python run_ods.py --mode incremental  # 增量（默认，使用双水位）
-python run_ods.py --mode full          # 全量覆盖
-python run_ods.py --mode qc            # 仅执行质量校验
+python run_ods.py                # 增量（默认，使用双水位）
+python run_ods.py --full         # 全量覆盖
+python run_ods.py --skip-qc      # 跳过自动质检
 ```
 
-ODS 质检日志输出到 `logs/ods_qc_<日期>.log`。
+如仅执行质检，请直接运行 `tools/check_ods_incremental.py` 与 `tools/check_ods_retailitem_quality.py`；
+ODS 质检日志输出到 `logs/ods_qc_<日期时间>.log`。
+
+### 3.3 查询与审计执行面
+
+- 结构探查：优先使用 MySQL / Oracle MCP 或 `db-inspector`，仅查看表、字段、索引与注释。
+- 固定对账：优先使用 `tools/check_ods_incremental.py` 与 `tools/check_ods_retailitem_quality.py`，避免重复实现既有口径。
+- 自由查数：通过 `tools/query_data.py` 统一承接 MySQL / Oracle 只读查询，并支持导出 `table`、`json`、`csv`、`excel`。
+- ADS 固定导出：通过 `tools/export_ads.py` 导出 `ads_inventory_health`；结构快照由 `tools/snapshot_mysql_hefangdw_schema.py` 与 `tools/snapshot_oracle_bosnds3_schema.py` 生成。
+- 经验复盘：通用经验沉淀到 `docs/AGENT_LESSONS.md`，由 `scripts/log_agent_lesson.py` 负责结构化写入；用户明确纠错的业务结论也必须进入该台帐。
+- Hook 边界：当前仓库内已确认可用的是 `.claude/settings.json` 的 `PostToolUse` 提示型 Hook；GitHub Copilot 当前未暴露可在仓库本地强制执行的“会话结束自动写台帐”钩子，因此需要保留收尾自检与命令兜底。
 
 ---
 
@@ -213,10 +229,11 @@ ODS 质检日志输出到 `logs/ods_qc_<日期>.log`。
 Windows 任务计划（每日 xx:xx）
     └─▶ run_scheduled_etl.bat
             └─▶ scheduled_etl.py
-                    ├─▶ run_etl.py（7步流水线）
+                    ├─▶ run_etl.py（8步流水线）
                     │       ├─▶ etl_dim_product.run()
                     │       ├─▶ etl_dim_sku.run()
                     │       ├─▶ etl_dim_store.run()
+                    │       ├─▶ etl_dim_channel.run()
                     │       ├─▶ etl_dws_sales.run()
                     │       ├─▶ etl_dws_inventory.run()
                     │       ├─▶ dabo_ready（CSV 就绪检查）
@@ -227,7 +244,7 @@ Windows 任务计划（每日 xx:xx）
 ODS 流水线独立调度（通常早于主流水线）：
 ```
 Windows 任务计划（每日更早）
-    └─▶ python run_ods.py --mode incremental
+    └─▶ python run_ods.py
             ├─▶ etl_ods_fa_storage.run()
             ├─▶ etl_ods_m_retail.run()
             └─▶ etl_ods_m_retailitem.run()
@@ -265,3 +282,7 @@ Windows 任务计划（每日更早）
 |------|------|----------|
 | v0.6.3 | 2026-03-01 | 对齐 v0.6.3 目录与调度描述 |
 | v0.7.0 | 2026-03-04 | 补充 Agent/Skills 目录与 MCP 本地配置 |
+| v0.7.1 | 2026-03-16 | 同步 run_ods 参数与 ODS 质检说明 |
+| v0.7.2 | 2026-03-18 | 增加 dim_channel 维度实现并将主流水线更新为 8 步 |
+| v0.7.4 | 2026-03-18 | 新增只读查数工具、data-query skill/agent 与 MCP 降级说明 |
+| v0.7.5 | 2026-03-18 | 新增经验台帐、复盘脚本与 Hook 边界说明 |

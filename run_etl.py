@@ -30,10 +30,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 确保输出使用 UTF-8
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
+def _reconfigure_stream_encoding(stream):
+    reconfigure = getattr(stream, 'reconfigure', None)
+    if callable(reconfigure):
+        reconfigure(encoding='utf-8')
+
+
+_reconfigure_stream_encoding(sys.stdout)
+_reconfigure_stream_encoding(sys.stderr)
 
 # 确保可导入同目录下的 ETL 模块（在某些运行器中默认不包含当前目录）
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -44,6 +48,7 @@ STEP_ORDER = [
     'dim_product',
     'dim_sku',
     'dim_store',
+    'dim_channel',
     'dws_sales',
     'dws_inventory',
     'dabo_ready',
@@ -323,7 +328,7 @@ def run_all():
         }
     
     # 1. 商品维度
-    logger.info("\n>>> [1/7] Syncing product dimensions...")
+    logger.info("\n>>> [1/8] Syncing product dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_product import run as run_dim_product
@@ -335,7 +340,7 @@ def run_all():
         logger.error(f"dim_product failed: {error_msg}")
     
     # 2. SKU维度
-    logger.info("\n>>> [2/7] Syncing sku dimensions...")
+    logger.info("\n>>> [2/8] Syncing sku dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_sku import run as run_dim_sku
@@ -347,7 +352,7 @@ def run_all():
         logger.error(f"dim_sku failed: {error_msg}")
 
     # 3. 店仓维度
-    logger.info("\n>>> [3/7] Syncing store dimensions...")
+    logger.info("\n>>> [3/8] Syncing store dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_store import run as run_dim_store
@@ -358,8 +363,20 @@ def run_all():
         update_step('dim_store', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dim_store failed: {error_msg}")
     
-    # 4. 销售数据
-    logger.info("\n>>> [4/7] Syncing sales data...")
+    # 4. 渠道维度
+    logger.info("\n>>> [4/8] Syncing channel dimensions...")
+    step_start = datetime.now()
+    try:
+        from etl_dim_channel import run as run_dim_channel
+        run_dim_channel()
+        update_step('dim_channel', 'SUCCESS', '同步完成', step_start)
+    except Exception as e:
+        error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+        update_step('dim_channel', 'FAILED', _extract_error_summary(error_msg), step_start)
+        logger.error(f"dim_channel failed: {error_msg}")
+
+    # 5. 销售数据
+    logger.info("\n>>> [5/8] Syncing sales data...")
     step_start = datetime.now()
     try:
         from etl_dws_sales import run as run_dws_sales, backfill as backfill_dws_sales
@@ -398,8 +415,8 @@ def run_all():
         update_step('dws_sales', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_sales failed: {error_msg}")
     
-    # 5. 库存数据
-    logger.info("\n>>> [5/7] Syncing inventory data...")
+    # 6. 库存数据
+    logger.info("\n>>> [6/8] Syncing inventory data...")
     step_start = datetime.now()
     try:
         from etl_dws_inventory import run as run_dws_inventory
@@ -410,8 +427,8 @@ def run_all():
         update_step('dws_inventory', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_inventory failed: {error_msg}")
 
-    # 6. 达播数据就绪检查（外部项目产出）
-    logger.info("\n>>> [6/7] Checking dabo data readiness...")
+    # 7. 达播数据就绪检查（外部项目产出）
+    logger.info("\n>>> [7/8] Checking dabo data readiness...")
     dabo_ready = False
     step_start = datetime.now()
     try:
@@ -442,8 +459,8 @@ def run_all():
         update_step('dabo_ready', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dabo_ready check failed: {error_msg}")
     
-    # 7. 库存健康度计算
-    logger.info("\n>>> [7/7] Calculating inventory health...")
+    # 8. 库存健康度计算
+    logger.info("\n>>> [8/8] Calculating inventory health...")
     step_start = datetime.now()
     try:
         from etl_ads_health import run as run_ads_health, backfill_dabo_fields

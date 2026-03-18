@@ -6,6 +6,10 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT_DIR / "reports" / "docs_code_alignment.json"
+IGNORED_DOC_FILES = {
+    Path("docs") / "AGENT_HANDOFF.md",
+    Path("docs") / "AGENT_HANDOFF_archive.md",
+}
 
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
 TABLE_RE = re.compile(r"^(ods|dim|dwd|dws|ads)_[a-z0-9_]+$")
@@ -101,6 +105,13 @@ STOPWORDS = {
     "config",
     "mysql",
     "oracle",
+    "get_snapshot_date",
+    "sql_name",
+    "template_name",
+    "total_amount",
+    "idx_channel_code",
+    "idx_store_code",
+    "idx_wing_code",
 }
 
 
@@ -304,7 +315,11 @@ def main():
     args = parser.parse_args()
 
     docs_files = [ROOT_DIR / "README.md"]
-    docs_files.extend((ROOT_DIR / "docs").rglob("*.md"))
+    docs_files.extend(
+        path
+        for path in (ROOT_DIR / "docs").rglob("*.md")
+        if path.relative_to(ROOT_DIR) not in IGNORED_DOC_FILES
+    )
 
     code_exts = {".py", ".sql", ".bat", ".yml", ".yaml", ".ini", ".cfg", ".conf"}
     exclude_dirs = {
@@ -316,6 +331,7 @@ def main():
         "docs",
         ".github",
         "reports",
+        "example_repos",
     }
     code_files = iter_files(ROOT_DIR, code_exts, exclude_dirs)
 
@@ -377,6 +393,7 @@ def main():
             "docs_scope": ["README.md", "docs/**/*.md"],
             "code_scope": sorted(code_exts),
             "exclude_dirs": sorted(exclude_dirs),
+            "ignored_doc_files": [str(path).replace("\\", "/") for path in sorted(IGNORED_DOC_FILES)],
             "not_filled_marker": NOT_FILLED_MARKER,
             "mysql_snapshot_path": str(MYSQL_SNAPSHOT_PATH.relative_to(ROOT_DIR)),
             "audit_meta_terms_filtered": sorted(AUDIT_META_TERMS),

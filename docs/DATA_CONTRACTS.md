@@ -4,7 +4,7 @@
 >
 > 当任意表结构、粒度、水位逻辑发生变更时，必须同步更新本文件。
 >
-> 最后更新：2026-03-01（v0.6.3 对齐）
+> 最后更新：2026-03-18（v2.5 对齐）
 
 ---
 
@@ -18,6 +18,7 @@
   - [dim_product](#dim_product)
   - [dim_sku](#dim_sku)
   - [dim_store](#dim_store)
+  - [dim_channel](#dim_channel)
 - [DWS 层](#dws-层)
   - [dws_sales_daily](#dws_sales_daily)
   - [dws_inventory_daily](#dws_inventory_daily)
@@ -240,6 +241,38 @@ DIM（Dimension）层是每日全量刷新的维度表。直接从 Oracle 拉取
 
 ---
 
+### dim_channel
+
+| 属性 | 值 |
+|------|-----|
+| **来源** | Oracle: `O2O_RETAIL_CHANNEL`（电商渠道档案） |
+| **生产脚本** | `etl_dim_channel.py` |
+| **粒度** | 1行 = 1个电商渠道 |
+| **更新策略** | 每日全量覆盖 |
+| **主键** | `channel_id` |
+
+**关键字段**：
+
+| 字段名 | 类型 | 含义 |
+|--------|------|------|
+| `channel_id` | INT | 渠道ID（Oracle `ID`） |
+| `channel_name` | VARCHAR | 渠道名称（Oracle `NAME`） |
+| `channel_code` | VARCHAR | 渠道档案编码（Oracle `CODE`） |
+| `WING_CODE` | VARCHAR | 对应店仓编码（Oracle `WING_CODE`） |
+| `is_main` | TINYINT | 是否主要渠道（文档定义主渠道ID集映射） |
+| `platform_type` | VARCHAR | 平台类型（按渠道名称派生） |
+| `is_active` | CHAR(1) | 是否有效（Oracle `ISACTIVE`） |
+| `created_at` | DATETIME | ETL 写入时间 |
+
+说明：`dim_channel` 的目标结构已在 MySQL 快照中存在，来源表也能在 Oracle 快照中定位；但最新交接记录注明“未执行真实 ETL 写库”，因此本契约目前表示“目标设计与仓库实现”，不等同于“目标库现存数据已完成替换”。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json#L720-L790)；[reports/snapshot_oracle_bosnds3_schema.json](reports/snapshot_oracle_bosnds3_schema.json#L9870-L9925)；[etl_dim_channel.py](etl_dim_channel.py#L1-L131)；[SQL/create_dim_channel.sql](SQL/create_dim_channel.sql#L1-L11)；[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md#L55-L61)
+
+**DQ/处理规则**：
+- `is_main = 1` 当 `channel_id` 在文档定义的主要渠道 ID 集 `{11, 19, 28, 57, 60, 85, 300}`。来源：[etl_dim_channel.py](etl_dim_channel.py#L22-L51)
+- `WING_CODE` 直接映射 Oracle `WING_CODE`；结合 `C_STORE.CODE` 规则，它才是 DS001 这类店仓编码的来源，`CODE` 仅保留为渠道档案编码。来源：[etl_dim_channel.py](etl_dim_channel.py#L27-L45)；[docs/业务逻辑与指标规范.md](docs/业务逻辑与指标规范.md#L211-L234)
+- `platform_type` 按渠道名称归类为天猫/京东/抖音/小红书/视频号/唯品会/得物/其他。来源：[etl_dim_channel.py](etl_dim_channel.py#L33-L43)
+
+---
+
 ## DWS 层
 
 DWS（Data Warehouse Summary）层是面向主题的汇总明细层。
@@ -408,19 +441,21 @@ ADS（Application Data Store）层是面向业务消费的宽表，每日全量�
 | **生产方式** | 手动导入（见 `docs/达播数据运营上传指南.md`）|
 | **粒度** | 1行 = 1个 SKU 在1天的达播销售记录 |
 | **更新策略** | 手动触发回填（由 `run_etl.py` 中 `dabo_ready` 步骤检测）|
-| **主键** | `(sale_date, m_productalias_id)` |
+| **主键** | `(sale_date, product_alias_code)` |
 
 **关键字段**：
 
 | 字段名 | 类型 | 含义 |
 |--------|------|------|
 | `sale_date` | DATE | 销售日期 |
-| `m_productalias_id` | BIGINT | SKU ID |
-| `dabo_qty` | DECIMAL | 达播销量（未在代码实现写入，代码使用 `dabo_sales_qty` / `dabo_revenue`） |
-| `dabo_amt` | DECIMAL | 达播销售额（未在代码实现写入，代码使用 `dabo_revenue`） |
-| `dabo_latest_date` | DATE | 达播数据最新日期 |
+| `product_alias_code` | VARCHAR | SKU 条码 |
+| `dabo_sales_qty` | INT | 达播销量 |
+| `dabo_order_count` | INT | 达播订单数 |
+| `dabo_revenue` | DECIMAL | 达播销售额 |
+| `created_at` | DATETIME | 创建时间 |
+| `updated_at` | DATETIME | 更新时间 |
 
-说明：达播字段当前在代码中使用 `dabo_sales_qty` / `dabo_revenue` / `dabo_latest_date`。来源：[etl_ads_health.py](etl_ads_health.py#L118-L130)
+说明：`dabo_latest_date` 为 `etl_ads_health.py` 汇总计算出的衍生字段，不是 `ads_dabo_daily_sales` 物理字段。来源：[etl_ads_health.py](etl_ads_health.py#L156-L161)；[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json)
 
 ---
 
@@ -429,16 +464,14 @@ ADS（Application Data Store）层是面向业务消费的宽表，每日全量�
 ### 库存周转天数
 
 ```
-周转天数 = 当前库存 / 日均净销量
-         = qty_total / (sale_30d / 30)
-
-日均净销量 = 近30天净销量 / 30
+周转天数 = 当前库存 / 近30天日均销量
+         = total_qty / (sales_qty_30d / 30)
 ```
 
 ### 建议补货量
 
 ```
-建议补货量 = (90 - 周转天数) × 日均净销量
+建议补货量 = (90 - 周转天数) × 近30天日均销量
            - 近30天退货量
            - 采购在途量（M_PURCHASEITEM 未到货）
 ```
@@ -446,15 +479,15 @@ ADS（Application Data Store）层是面向业务消费的宽表，每日全量�
 ### 自然销量口径（剔除达播）
 
 ```
-自然净销量(7天) = sale_7d - dabo_sale_7d
-自然净销量(30天) = sale_30d - dabo_sale_30d
+natural_sales_qty_7d = sales_qty_7d - dabo_sales_qty_7d
+natural_sales_qty_30d = sales_qty_30d - dabo_sales_qty_30d
 ```
 
 ### 销售速度比
 
 ```
-销售速度比 = (近7天日均净销量) / (近30天日均净销量)
-           = (sale_7d / 7) / (sale_30d / 30)
+销售速度比 = (近7天日均销量) / (近30天日均销量)
+           = (sales_qty_7d / 7) / (sales_qty_30d / 30)
 
 > 1：近期加速（趋热）
 < 1：近期减速（趋冷）
@@ -499,3 +532,5 @@ WHERE p.M_DIM4_ID IN (134, 142, 139, 138, 141, 143, 133, 136, 140, 137, 144, 145
 | v2.2 | 2026-03-01 | 修正 dim_product 字段清单与抽取逻辑描述 |
 | v2.3 | 2026-03-02 | 调整审计术语与补充快照字段说明 |
 | v2.4 | 2026-03-02 | 补回结构字段并标注未填充说明 |
+| v2.5 | 2026-03-18 | 新增 dim_channel 数据契约与 Oracle 来源说明 |
+| v2.6 | 2026-03-18 | 将 dim_channel 店仓字段重命名为 WING_CODE 并对齐 Oracle 来源 |

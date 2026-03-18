@@ -30,6 +30,20 @@
 
 **禁止跳过此步骤直接修改代码或文档。**
 
+4. **若本次工作形成可复用经验，或用户明确纠正业务逻辑/字段语义/SQL口径，必须写入经验台帐**：
+    ```bash
+    python scripts/log_agent_lesson.py \
+       --source "task|user-feedback" \
+       --category "field-mapping/business-rule/mcp/path" \
+       --trigger "触发场景" \
+       --mistake "错误假设" \
+       --correction "修正结论" \
+       --evidence "来源代码文件+行号" \
+       --prevention "后续预防动作"
+    ```
+
+**禁止在已形成高复用经验后仅停留在口头总结而不落盘。**
+
 ---
 
 ## 🔒 核心原则：代码与文档同提交
@@ -86,6 +100,7 @@
 - [ ] `docs/SQL开发手册.md` — 示例SQL是否能在当前表上运行
 - [ ] `README.md` — 入口信息/示例/配置是否过期
 - [ ] `docs/TODO_ISSUES.md` — P0/P1/P2 待办与风险是否更新
+- [ ] `docs/AGENT_LESSONS.md` — 本轮是否产生了应沉淀的经验台帐
 - [ ] 若新增 `docs/*.md`，必须将新文档补充到本清单并纳入同步范围
 
 ## 五、版本记录格式（统一）

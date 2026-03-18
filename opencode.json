@@ -1,0 +1,88 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "build",
+  "instructions": [
+    "AGENTS.md",
+    ".opencode/instructions/PROJECT_WORKFLOW.md"
+  ],
+  "agent": {
+    "build": {
+      "description": "HEFANG-DW primary coding agent for daily maintenance and small changes.",
+      "mode": "primary",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "planner": {
+      "description": "Plan ETL, docs, and maintenance tasks before implementation.",
+      "mode": "subagent",
+      "prompt": "{file:.opencode/prompts/agents/planner.md}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "etl-reviewer": {
+      "description": "Review ETL and script changes for mapping, incremental logic, and maintainability.",
+      "mode": "subagent",
+      "prompt": "{file:.opencode/prompts/agents/etl-reviewer.md}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "doc-syncer": {
+      "description": "Check and update docs to stay aligned with code and scripts.",
+      "mode": "subagent",
+      "prompt": "{file:.opencode/prompts/agents/doc-syncer.md}",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    }
+  },
+  "command": {
+    "plan": {
+      "description": "Create a concise implementation plan before changes.",
+      "template": "{file:.opencode/commands/plan.md}\n\n$ARGUMENTS",
+      "agent": "planner",
+      "subtask": true
+    },
+    "etl-audit": {
+      "description": "Audit ETL scripts, SQL usage, mapping, and incremental logic.",
+      "template": "{file:.opencode/commands/etl-audit.md}\n\n$ARGUMENTS",
+      "agent": "etl-reviewer",
+      "subtask": true
+    },
+    "doc-sync": {
+      "description": "Check docs against code and update only when needed.",
+      "template": "{file:.opencode/commands/doc-sync.md}\n\n$ARGUMENTS",
+      "agent": "doc-syncer",
+      "subtask": true
+    },
+    "quality-check": {
+      "description": "Run the HEFANG-DW minimal quality workflow.",
+      "template": "{file:.opencode/commands/quality-check.md}\n\n$ARGUMENTS"
+    },
+    "handoff": {
+      "description": "Append a standard agent handoff record.",
+      "template": "{file:.opencode/commands/handoff.md}\n\n$ARGUMENTS"
+    },
+    "lesson": {
+      "description": "Append a reusable lesson learned record.",
+      "template": "{file:.opencode/commands/lesson.md}\n\n$ARGUMENTS"
+    }
+  },
+  "permission": {
+    "mcp_*": "ask"
+  }
+}

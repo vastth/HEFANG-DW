@@ -96,7 +96,7 @@ def test_dim_store():
     cursor = conn.cursor()
     
     print("\n" + "="*80)
-    print("【2/5】测试 dim_store - 店仓维度表")
+    print("【2/6】测试 dim_store - 店仓维度表")
     print("="*80)
     
     # 总记录数
@@ -133,13 +133,54 @@ def test_dim_store():
     conn.close()
     return status
 
+
+def test_dim_channel():
+    """测试渠道维度表"""
+    conn = get_mysql_conn()
+    cursor = conn.cursor()
+
+    print("\n" + "="*80)
+    print("【3/6】测试 dim_channel - 渠道维度表")
+    print("="*80)
+
+    cursor.execute("SELECT COUNT(*) FROM dim_channel")
+    total = cursor.fetchone()[0]
+    print(f"  总渠道数: {total:,}")
+
+    cursor.execute("SELECT COUNT(*) FROM dim_channel WHERE is_main = 1")
+    main_total = cursor.fetchone()[0]
+    print(f"  主要渠道数: {main_total}")
+
+    cursor.execute("""
+        SELECT platform_type, COUNT(*) AS cnt
+        FROM dim_channel
+        GROUP BY platform_type
+        ORDER BY cnt DESC, platform_type
+    """)
+    print("  平台类型分布:")
+    for row in cursor.fetchall():
+        print(f"    {row[0]}: {row[1]}")
+
+    cursor.execute("SELECT COUNT(*) FROM dim_channel WHERE WING_CODE = 'DS001'")
+    has_store_mapping = cursor.fetchone()[0]
+
+    if total == 0 or has_store_mapping == 0:
+        print("  ❌ 渠道维度缺少关键基础数据")
+        status = "❌ FAIL"
+    else:
+        print("  ✓ 渠道维度基础数据检查通过")
+        status = "✅ PASS"
+
+    conn.close()
+    return status
+
 def test_dws_inventory():
     """测试库存汇总表"""
     conn = get_mysql_conn()
     cursor = conn.cursor()
     
     print("\n" + "="*80)
-    print("【3/5】测试 dws_inventory_daily - 库存明细表")
+    print("【4/6】测试 dws_inventory_daily - 库存明细表")
     print("="*80)
     
     today = int(datetime.now().strftime('%Y%m%d'))
@@ -189,7 +230,7 @@ def test_dws_sales():
     cursor = conn.cursor()
     
     print("\n" + "="*80)
-    print("【4/5】测试 dws_sales_daily - 销售明细表")
+    print("【5/6】测试 dws_sales_daily - 销售明细表")
     print("="*80)
     
     today = int(datetime.now().strftime('%Y%m%d'))
@@ -248,7 +289,7 @@ def test_ads_health():
     cursor = conn.cursor()
     
     print("\n" + "="*80)
-    print("【5/5】测试 ads_inventory_health - 库存健康度表")
+    print("【6/6】测试 ads_inventory_health - 库存健康度表")
     print("="*80)
     
     today = int(datetime.now().strftime('%Y%m%d'))
@@ -338,6 +379,12 @@ def main():
     except Exception as e:
         print(f"  ❌ 测试失败: {e}")
         results['dim_store'] = "❌ ERROR"
+
+    try:
+        results['dim_channel'] = test_dim_channel()
+    except Exception as e:
+        print(f"  ❌ 测试失败: {e}")
+        results['dim_channel'] = "❌ ERROR"
     
     try:
         results['dws_inventory'] = test_dws_inventory()

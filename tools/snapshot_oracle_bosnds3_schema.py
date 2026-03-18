@@ -1,12 +1,23 @@
 import argparse
 import json
-import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import oracledb
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from config import ORACLE_CONFIG, ORACLE_DSN
+
+
+def _resolve_path(path_str: str) -> Path:
+    output_path = Path(path_str)
+    if not output_path.is_absolute():
+        output_path = REPO_ROOT / output_path
+    return output_path
 
 
 def load_oracle_table_list(doc_path: Path):
@@ -51,7 +62,7 @@ def _format_oracle_type(row):
 
 
 def fetch_schema(schema_name: str):
-    doc_path = Path("docs") / "数据结构与映射手册.md"
+    doc_path = REPO_ROOT / "docs" / "数据结构与映射手册.md"
     table_filter = {name.upper() for name in load_oracle_table_list(doc_path)}
 
     conn = oracledb.connect(
@@ -196,19 +207,17 @@ def fetch_schema(schema_name: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Export Oracle BOSNDS3 schema snapshot."
+        description="导出 Oracle BOSNDS3 结构快照。"
     )
     parser.add_argument(
         "--schema",
         default="BOSNDS3",
-        help="Oracle schema owner (default: BOSNDS3)",
+        help="Oracle schema owner，默认 BOSNDS3",
     )
     parser.add_argument(
         "--output",
         default="reports/snapshot_oracle_bosnds3_schema.json",
-        help=(
-            "Output JSON path (default: reports/snapshot_oracle_bosnds3_schema.json)"
-        ),
+        help="输出 JSON 路径，默认写入 reports/snapshot_oracle_bosnds3_schema.json",
     )
     args = parser.parse_args()
 
@@ -216,7 +225,7 @@ def main():
         raise RuntimeError("Oracle schema is empty")
 
     snapshot = fetch_schema(args.schema.upper())
-    output_path = Path(args.output)
+    output_path = _resolve_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(snapshot, ensure_ascii=True, indent=2),

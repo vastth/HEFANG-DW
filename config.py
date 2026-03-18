@@ -82,6 +82,7 @@ TASK_DISPLAY_NAME = {
     'dim_product': '商品维度',
     'dim_sku': 'SKU 维度',
     'dim_store': '店仓维度',
+    'dim_channel': '渠道维度',
     'dws_sales': '销售数据 (dws_sales)',
     'dws_inventory': '库存数据 (dws_inventory)',
     'dabo_ready': '达播数据就绪检查',

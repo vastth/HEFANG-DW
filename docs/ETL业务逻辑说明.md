@@ -41,6 +41,8 @@ M_PRODUCT_ALIAS ─────────────────────�
                                          
 C_STORE + C_AREA ───────────────────────→ dim_store        (店仓信息)
 
+O2O_RETAIL_CHANNEL ─────────────────────→ dim_channel      (渠道信息)
+
 M_RETAIL + M_RETAILITEM ────────────────→ dws_sales_daily  (销售汇总)
   + C_STORE
 
@@ -57,22 +59,23 @@ dim_sku             │
 dim_store           ┘
 ```
 
-### 执行顺序（7步）
+### 执行顺序（8步）
 
 | 步骤 | 脚本 | 做什么 | 耗时 |
 |------|------|--------|------|
 | 1 | etl_dim_product | 把Oracle里的商品信息复制到MySQL | ~3分钟 |
 | 2 | etl_dim_sku | 把Oracle里的SKU条码信息复制到MySQL | ~1分钟 |
 | 3 | etl_dim_store | 把Oracle里的店仓信息复制到MySQL | ~1分钟 |
-| 4 | etl_dws_sales | 把昨天（或今天）的销售数据拉过来 | ~5分钟 |
-| 5 | etl_dws_inventory | 拍一张当天的库存"照片" | ~10分钟 |
-| 6 | (达播就绪检查) | 看看今天的达播CSV是否已导入 | ~1秒 |
-| 7 | etl_ads_health | 在MySQL里算库存健康度 | ~5分钟 |
+| 4 | etl_dim_channel | 把Oracle里的电商渠道信息复制到MySQL | ~1分钟 |
+| 5 | etl_dws_sales | 把昨天（或今天）的销售数据拉过来 | ~5分钟 |
+| 6 | etl_dws_inventory | 拍一张当天的库存"照片" | ~10分钟 |
+| 7 | (达播就绪检查) | 看看今天的达播CSV是否已导入 | ~1秒 |
+| 8 | etl_ads_health | 在MySQL里算库存健康度 | ~5分钟 |
 
 **调度任务键名（run_etl.py）**：
-dim_product / dim_sku / dim_store / dws_sales / dws_inventory / dabo_ready / ads_health
+dim_product / dim_sku / dim_store / dim_channel / dws_sales / dws_inventory / dabo_ready / ads_health
 
-**依赖关系**：步骤1-3可以独立跑，步骤7依赖步骤1-5的结果。
+**依赖关系**：步骤1-4可以独立跑，步骤8依赖步骤1-6的结果。
 
 ---
 
@@ -224,6 +227,48 @@ C_AREA  (区域表)   ─┘──→  dim_store (店仓维度表)
 | is_cloud_store | C_STORE.IS_ALLO2OSTORAGE | 是否云仓(Y/N) |
 | store_type | 计算字段 | 根据CODE前缀判断 |
 | area_name | C_AREA.NAME | 区域名称 |
+
+---
+
+## 四点五、etl_dim_channel.py — 渠道信息同步
+
+### 一句话
+
+**把 Oracle 里的电商渠道主档 O2O_RETAIL_CHANNEL 同步到 MySQL dim_channel，补齐仓库内可追溯链路。目标库现存数据是否已替换，仍需执行脚本后验证。**
+
+### 数据流
+
+```
+Oracle                              MySQL
+━━━━━                              ━━━━━
+O2O_RETAIL_CHANNEL ───────────────→ dim_channel (渠道维度表)
+```
+
+### 具体做了什么
+
+1. **从Oracle抽数**：读取 `ID / NAME / CODE / WING_CODE / ISACTIVE`
+2. **补齐店仓映射**：`WING_CODE = O2O_RETAIL_CHANNEL.WING_CODE`，直接保留 DS001 这类店仓编码
+3. **计算主要渠道**：按已在文档中确认的渠道ID集合打标 `is_main`
+4. **归类平台类型**：根据渠道名称归到天猫/京东/抖音/小红书/视频号/唯品会/得物/其他
+5. **全量覆盖写入**：TRUNCATE → INSERT
+
+### 关键字段映射
+
+| MySQL字段 | Oracle来源 | 说明 |
+|-----------|------------|------|
+| channel_id | O2O_RETAIL_CHANNEL.ID | 主键 |
+| channel_name | O2O_RETAIL_CHANNEL.NAME | 渠道名称 |
+| channel_code | O2O_RETAIL_CHANNEL.CODE | 渠道档案编码，不直接等同店仓编码 |
+| WING_CODE | O2O_RETAIL_CHANNEL.WING_CODE | 店仓编码直接来源 |
+| is_main | 计算字段 | 主要渠道ID集映射 |
+| platform_type | 计算字段 | 按名称归类平台 |
+| is_active | O2O_RETAIL_CHANNEL.ISACTIVE | 是否有效 |
+
+### 为什么要单独建这张表
+
+- 原来 dim_channel 只有数据库里一张表，仓库内没有装载入口，审计时无法归因
+- 现在渠道维度与店仓维度一样，仓库内已经补齐 Oracle → MySQL 全量同步链路
+- 但该链路尚未在最新交接记录中证明已对目标库执行过真实写入，所以关闭待办前仍要检查 `WING_CODE` 是否已回填为 DS 编码
 
 ---
 
@@ -585,20 +630,21 @@ dim_store (店仓维度)           ─┘
 
 ### 一句话
 
-**ETL的"总指挥"——按顺序执行7个步骤，统一处理异常、重试、发送企业微信通知。**
+**ETL的"总指挥"——按顺序执行8个步骤，统一处理异常、重试、发送企业微信通知。**
 
 ### 执行流程
 
 ```
 run_etl.py
-  ├─> [1/7] etl_dim_product.run()     商品维度
-  ├─> [2/7] etl_dim_sku.run()         SKU维度
-  ├─> [3/7] etl_dim_store.run()       店仓维度
-  ├─> [4/7] etl_dws_sales.run()       销售数据
+  ├─> [1/8] etl_dim_product.run()     商品维度
+  ├─> [2/8] etl_dim_sku.run()         SKU维度
+  ├─> [3/8] etl_dim_store.run()       店仓维度
+  ├─> [4/8] etl_dim_channel.run()     渠道维度
+  ├─> [5/8] etl_dws_sales.run()       销售数据
   │         ↳ 自动检查近30天覆盖度，不足则backfill
-  ├─> [5/7] etl_dws_inventory.run()   库存快照
-  ├─> [6/7] 达播数据就绪检查           查MySQL看今天有没有达播数据
-  └─> [7/7] etl_ads_health.run()      库存健康度计算
+  ├─> [6/8] etl_dws_inventory.run()   库存快照
+  ├─> [7/8] 达播数据就绪检查           查MySQL看今天有没有达播数据
+  └─> [8/8] etl_ads_health.run()      库存健康度计算
             ↳ 如果达播就绪，还会执行 backfill_dabo_fields()
 
 - **达播latest_date**：达播就绪检查会记录最新日期（MAX sale_date）用于日志与告警。
@@ -813,3 +859,5 @@ A: 按销售额降序排列SKU，逐个累加占比。当一个SKU让累计占�
 | v1.6 | 2026-02-28 | 补充start_time/end_time耗时统计说明 |
 | v1.7 | 2026-02-28 | 统一start_time/end_time反引号标注 |
 | v1.8 | 2026-02-28 | 增加代码字段命名对照表 |
+| v1.9 | 2026-03-18 | 新增 dim_channel 人话说明并同步主控调度为 8 步 |
+| v2.0 | 2026-03-18 | 将 dim_channel 店仓字段重命名为 WING_CODE 并对齐 Oracle 来源 |
