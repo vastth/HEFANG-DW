@@ -27,6 +27,212 @@
 
 ---
 
+### [2026-03-20 10:35] · GitHub Copilot · 新增 superpowers 内化会议纪要
+
+**摘要**：将 GitHub Copilot 能力内化讨论沉淀为持续更新的会议纪要文档，确认采用三阶段推进方案
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/superpowers内化会议纪要.md` | 新增 | 记录 superpowers 内化目标、三阶段方案、能力映射与后续更新规则 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮会议纪要建档交接记录 |
+
+**Copilot 接棒须知**：
+- 后续凡涉及 Copilot 自定义能力、superpowers 方法论迁移、skills / agents / hooks 分层设计的讨论，优先更新 `docs/misc/superpowers内化会议纪要.md`。
+- 当前仍处于方案讨论阶段，尚未创建 `.github/instructions/`、`.github/prompts/`、`.github/agents/` 或 `.github/skills/` 的新能力文件。
+
+**未完成项**：
+- [ ] 细化第一阶段 5 个能力的详细规格（名称、触发语、输入、输出、边界、是否调用脚本）
+- [ ] 设计 `.github` 下未来 Copilot 自定义能力的目录分层
+
+---
+
+### [2026-03-20 10:51] · GitHub Copilot · 补充 hfsy 数据字典与实表审计产物
+
+**摘要**：新增 HFSY 数据字典与 hfsy 结构快照，并把它们纳入数云 CRM 实施计划的主证据链。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `reports/snapshot_mysql_hfsy_schema.json` | 新增 | hfsy 实库结构快照，记录表、字段、键和行数 |
+| `docs/HFSY数据字典.md` | 新增 | 基于 hfsy 实库快照生成源侧表字段数据字典 |
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 补充 hfsy 快照与 HFSY 数据字典为第 2 轮实表校正证据 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.8 新增 HFSY 数据字典 |
+| `.github/copilot-instructions.md` | 修改 | 将 docs/HFSY数据字典.md 纳入文档同步检查清单 |
+
+**Copilot 接棒须知**：
+- 后续 CRM 设计应优先引用 reports/snapshot_mysql_hfsy_schema.json 与 docs/HFSY数据字典.md；当前仍需补充 t_member_bind_info 的 *1 列覆盖率统计，以及确认 t_order_copy / t_order_copy1 是否仅为备份表。
+
+**未完成项**：
+- [ ] 继续做 hfsy 行级抽样与字段覆盖率探查
+- [ ] 确认 t_order_copy 与 t_order_copy1 的正式链路角色
+- [ ] 若继续实现 CRM ETL，按 hfsy.t_member_info / t_member_bind_info / t_pin_xid_rel 作为第一阶段输入
+
+---
+
+### [2026-03-20 09:50] · GitHub Copilot · 校正数云CRM实表依据
+
+**摘要**：纳入 hfsy 实表与 xlsx 证据，修正 CRM 实施计划对标准方案和 MySQL 8.0 的过度假设
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 纳入 hfsy 实表与 xlsx 证据，切换到第 2 轮实表校正 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.7 数云 CRM 实表证据校正 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录标准方案不能替代真实实表的经验 |
+
+**Copilot 接棒须知**：
+- 后续 CRM 开发起点应从 `hfsy.t_member_info`、`hfsy.t_member_bind_info`、`t_pin_xid_rel` 出发，不再以 `fdi_*` JSON 表作为当前唯一事实源。
+- 下一步优先做样例行级探查与 modified 字段质量检查，确认 *1 解密列覆盖率和 order_copy 表是否为备份。
+
+**未完成项**：
+- [ ] 对 hfsy 核心表抽样 5~10 行，验证 modified 时间串格式、platCode 分布和 *1 字段覆盖率
+- [ ] 确认 t_order_copy 与 t_order_copy1 是否只是备份表，正式链路是否只消费 t_order
+
+
+---
+
+### [2026-03-19 18:11] · GitHub Copilot · 补充环境现实约束并生成数云方索取模板
+
+**摘要**：将单人负责数据库的环境边界写入项目硬约束，并为数云方准备可直接发送的资料索取模板
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/copilot-instructions.md` | 修改 | 增加单人负责数据库与外部取证优先级硬约束 |
+| `AGENTS.md` | 修改 | 增加环境现实约束与CRM取证路径 |
+| `.claude/CLAUDE.md` | 修改 | 为Claude侧补充单人数据库环境硬约束 |
+| `docs/ARCHITECTURE.md` | 修改 | 补充Oracle/VM部署边界与CRM实证来源限制 |
+| `CHANGELOG.md` | 修改 | 记录v0.7.6环境约束更新 |
+
+**Copilot 接棒须知**：
+- 后续涉及CRM实证时，不再默认存在内部DBA或同事；优先向用户索取本地可导出材料，若环境无对象再转向数云方。
+
+**未完成项**：
+- [ ] 如进入CRM第2轮审计，先向数云方索取真实建表SQL、关键表样本与xid/商品类目表确认。
+
+
+
+---
+
+### [2026-03-19 18:35] · GitHub Copilot · 完成CRM第1轮字段级仲裁
+
+**摘要**：完成 12 张数云 ODS 表的字段级仲裁矩阵，区分已可设计、待实表验证与标准方案文档自身缺口三类对象
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 新增第 1 轮 12 表字段级仲裁矩阵、发现清单与待确认项 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录外部接入表不应一律视为可直接设计的经验 |
+
+**Copilot 接棒须知**：
+- 第一阶段真正可直接进入实现设计的核心对象仍是 `fdi_member_info` 与 `fdi_jos_pin_xid`，订单链路属于第二阶段扩展。
+- 若继续第 2 轮，应优先索取真实 `shuyun_ods` 建表 SQL、`SHOW CREATE TABLE` 或脱敏样本，验证 `fdi_refund`、`fdi_rate`、`fdi_member_point_his`、`fdi_member_grade_his` 和商品类目表。
+
+**未完成项**：
+- [ ] 进入第 2 轮时，用真实 `shuyun_ods` 实表或样本验证 5 类残留问题：`member_id` 映射、`refund` 账号字段、`xid` 真实形态、包裹密文覆盖范围、商品类目表真实表名。
+
+
+
+
+---
+
+### [2026-03-19 18:18] · GitHub Copilot · 修正CRM计划版本漂移
+
+**摘要**：在继续细审前修正实施计划文首版本号与版本记录不一致的问题
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 将文首当前版本从 v2.1 修正为 v2.2，与版本记录一致 |
+
+**Copilot 接棒须知**：
+- 当前实施计划正文与版本表已按 v2.2 审计结果对齐。
+- 后续如继续细审，应重点处理“真实 ODS 实表/样本是否与仲裁文档一致”这一层，而不是再做文案级修词。
+
+**未完成项**：
+- [ ] 若需宣称与仲裁文档 100% 对齐，下一步必须引入真实 `shuyun_ods` 实表或样本数据做字段级核验。
+
+
+
+
+---
+
+### [2026-03-19 18:10] · GitHub Copilot · 再审计数云CRM实施计划
+
+**摘要**：依据三个仲裁文档、当前代码库与数据库快照，再次修正数云CRM实施计划中的过期事实、无效证据链与配置过度设计问题
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 修正 `.env.example` 现状、移除不存在的 R10 证据、增加仲裁优先级与固定协议约束 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录外部接入方案审计时的证据优先级与配置设计经验 |
+
+**Copilot 接棒须知**：
+- 当前 CRM 仍未落地任何代码或表结构，实施计划仍属于“待实施”文档，不应被当成已实现现状。
+- 后续若进入实现阶段，`xid` 是否解密、`.env.example` 扩展方式和 AES 协议固定性均应按本轮再审计后的 v2.2 执行。
+
+**未完成项**：
+- [ ] 如进入实施阶段，先按 v2.2 计划扩展 `.env.example` 与 `config.py`，不要新增第二份环境模板，也不要把固定加密协议做成运行时开关。
+
+
+
+
+---
+
+### [2026-03-19 17:31] · GitHub Copilot · 补充数云CRM计划交叉审计结论
+
+**摘要**：将敏感数据加密规则与数云沟通确认单的仲裁结论落入实施计划，并补充加密兼容、同步频率与京东pin→xid约束
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 补充交叉审计结论与仲裁材料约束 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录数云CRM字段语义与加密兼容经验 |
+
+**Copilot 接棒须知**：
+- 本轮仅更新文档与经验台帐，未变更CRM代码实现。
+- 实施计划已明确每小时同步、MySQL 8.0+、包裹格式未决与京东业务表plat_account=pinid。
+
+**未完成项**：
+- [ ] 如继续实施，先按文档中的 v2.1 约束落地 crypto/account_match/member ETL。
+
+
+
+
+---
+
+### [2026-03-19 17:23] · GitHub Copilot · 校正数云CRM实施计划
+
+**摘要**：将数云CRM实施计划改写为与当前代码库一致的校正版，修正主键、目录、水位与调度边界
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 按当前仓库结构重写实施计划并补充校正依据与版本记录 |
+
+**Copilot 接棒须知**：
+- 本轮仅修改实施计划文档，未创建任何CRM代码或DDL文件。
+- 计划已明确 dwd_member 主键改为稳定原值键，后续落地应避免使用 account_match_key 作为主键。
+
+**未完成项**：
+- [ ] 如进入实施阶段，先按计划落地 config.py、create_dwd_crm_tables.sql、utils/crypto.py、utils/account_match.py、etl_dwd_member.py、run_crm_etl.py。
+
+
+
+
+
+---
+
 ### [2026-03-18 15:19] · GitHub Copilot · 修复 run_etl 静态报错
 
 **摘要**：将 stdout/stderr 的 UTF-8 重配置改为类型检查友好的封装写法
@@ -63,6 +269,11 @@
 **未完成项**：
 - [ ] 如需进一步降低 low risk 噪音，可继续扩充 scripts/check_doc_sync.py 的 STOPWORDS，但不影响当前交付
 
+
+
+
+
+
 ---
 
 ### [2026-03-18 14:55] · GitHub Copilot · 验证 MCP 启动前提并修正示例配置
@@ -83,232 +294,6 @@
 **未完成项**：
 - [ ] 使用全新聊天会话再次验证 MCP 工具是否已暴露给代理。
 - [ ] 若新会话仍无 MCP 工具，进一步检查宿主是否读取了当前仓库的 `.mcp.json`。
-
-
----
-
-### [2026-03-18 14:48] · GitHub Copilot · 新增经验台帐与复盘机制
-
-**摘要**：解释 MCP 可见性边界，新增 Agent 经验台帐、记录脚本、OpenCode lesson 命令与复盘提醒机制
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `scripts/log_agent_lesson.py` | 新增 | 新增经验台帐结构化写入脚本 |
-| `docs/AGENT_LESSONS.md` | 新增 | 新增共享经验台帐并写入首条 Oracle 字段映射经验 |
-| `.claude/settings.json` | 修改 | 增加经验复盘提示型 Hook |
-| `.github/copilot-instructions.md` | 修改 | 增加经验台帐强制落盘规则与检查项 |
-| `AGENTS.md` | 修改 | 增加经验台帐原则与 `/lesson` 命令 |
-| `opencode.json` | 修改 | 注册 `/lesson` 命令 |
-| `.opencode/commands/lesson.md` | 新增 | 新增 OpenCode 经验记录命令模板 |
-| `README.md` | 修改 | 补充经验台帐入口 |
-| `docs/RUNBOOK.md` | 修改 | 补充经验台帐写入命令与 Hook 边界 |
-| `docs/ARCHITECTURE.md` | 修改 | 补充经验台帐与复盘执行面 |
-| `CHANGELOG.md` | 修改 | 记录 v0.7.5 经验台帐机制 |
-
-**Copilot 接棒须知**：
-- 当前仓库已具备“台帐文档 + 写入脚本 + OpenCode 命令 + Claude 提示型 Hook”的第一版经验复盘机制。
-- GitHub Copilot 当前仍未确认存在可由仓库本地强制注入的“会话结束自动写台帐”钩子，因此收尾时仍需主动判断是否要记账。
-
-**未完成项**：
-- [ ] 如需真正验证 MCP 是否能挂成可调用工具，需在本地重载编辑器会话并检查工具面板是否出现 mysql/oracle MCP 工具。
-- [ ] 如需把经验台帐进一步自动同步到 repo memory，可在后续迭代补一条专用工作流或脚本说明。
-
-
----
-
-### [2026-03-18 14:14] · GitHub Copilot · 修复 tools 直跑导入并新增只读查数工作流
-
-**摘要**：修复 tools 目录脚本任意 cwd 直跑导入问题，新增通用只读查数工具、data-query skill/agent，并同步 README、RUNBOOK、ARCHITECTURE 与 CHANGELOG
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `tools/snapshot_mysql_hefangdw_schema.py` | 修改 | 改为基于 REPO_ROOT 导入 config 并解析输出路径 |
-| `tools/snapshot_oracle_bosnds3_schema.py` | 修改 | 改为基于 REPO_ROOT 导入 config、读取 docs 并解析输出路径 |
-| `tools/test_connection.py` | 修改 | 补齐 REPO_ROOT 导入逻辑，支持从 tools 目录直接运行 |
-| `tools/export_ads.py` | 修改 | 新增 argparse 与稳定输出路径，保持 ads_inventory_health 只读导出 |
-| `tools/query_data.py` | 新增 | 新增 MySQL/Oracle 通用只读查询与导出工具 |
-| `.claude/skills/data-query/SKILL.md` | 新增 | 新增 data-query 查询路由技能 |
-| `.claude/agents/data-query-agent.md` | 新增 | 新增数据查询与对账专家 agent 定义 |
-| `README.md` | 修改 | 补充只读查数与结构快照入口 |
-| `docs/RUNBOOK.md` | 修改 | 补充 MCP 与只读查数说明及版本记录 |
-| `docs/ARCHITECTURE.md` | 修改 | 补充 data-query skill/agent、query_data 工具与查询执行面说明 |
-| `CHANGELOG.md` | 修改 | 记录 v0.7.4 只读查数工具与路径修复 |
-
-**Copilot 接棒须知**：
-- tools 目录下的快照、导出、连接测试脚本现在都可以从非仓库根目录直接启动。
-- 自由查数工作流已落到 tools/query_data.py，推荐顺序是 MCP 只读优先，失败时回退到 Python 查询工具。
-
-**未完成项**：
-- [ ] 如需真正启用 MCP，仍需本地创建 .mcp.json 并验证只读权限。
-- [ ] 如需让自然语言直接自动生成更复杂业务 SQL，后续还可继续沉淀模板。
-
-
----
-
-### [2026-03-18 14:05] · GitHub Copilot · 全量复核 MYSQL数据字典 并复跑审计
-
-**摘要**：按最新 MySQL 快照对 docs/MYSQL数据字典.md 全表复核，16/16 张 MySQL 表确认无高置信字段漂移；复跑 scripts/check_doc_sync.py 审计
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮全量复核与审计复跑记录 |
-| `reports/docs_code_alignment.json` | 修改 | 复跑文档审计输出最新结果 |
-
-**Copilot 接棒须知**：
-- MYSQL数据字典 与最新 MySQL 快照当前已对齐，可优先把后续关注点转到真正的结构/口径漂移，而不是继续逐表核字典。
-- 本轮审计 high 仍为 0；medium 从 2 变为 3，但新增项是 idx_channel_code / idx_store_code / idx_wing_code 这类索引名词法噪音，不是结构漂移。
-- docs_code_alignment 的 medium 增量来自 dim_channel 相关索引名，不属于高风险结构差异。
-
-**未完成项**：
-- [x] 已完成
-
-
-
----
-
-### [2026-03-18 13:54] · GitHub Copilot · 修正 ads_inventory_health 数据字典
-
-**摘要**：按最新 MySQL 快照修正 docs/MYSQL数据字典.md 中 ads_inventory_health 的字段顺序、可空性与默认值
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/MYSQL数据字典.md` | 修改 | 同步 ads_inventory_health 与最新快照一致 |
-
-**Copilot 接棒须知**：
-- 本次仅修改文档，不涉及 ETL 逻辑或表结构变更。
-- 修正依据为 reports/snapshot_mysql_hefangdw_schema.json（2026-03-18 13:49:40）。
-- dim_channel 的 WING_CODE 字段在快照与文档中已一致，无需继续修改。
-
-**未完成项**：
-- [ ] 如需进一步消除文档漂移，可继续核对其他表在 docs/MYSQL数据字典.md 中的可空性与默认值
-
-
-
----
-
-### [2026-03-18 13:51] · GitHub Copilot · 执行 schema-snap 快照审计
-
-**摘要**：更新 MySQL/Oracle 结构快照并完成 MySQL 数据字典字段漂移扫描
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `reports/snapshot_mysql_hefangdw_schema.json` | 修改 | 更新 MySQL 结构快照 |
-| `reports/snapshot_oracle_bosnds3_schema.json` | 修改 | 更新 Oracle 结构快照 |
-
-**Copilot 接棒须知**：
-- MySQL 快照覆盖 16 张表，Oracle 快照覆盖 10 张表。
-- dim_channel 的 WING_CODE 字段在快照与文档中一致。
-- 发现 ads_inventory_health 与文档存在高置信可空性和默认值差异，尚未改文档。
-
-**未完成项**：
-- [ ] 如需消除漂移，更新 docs/MYSQL数据字典.md 中 ads_inventory_health 的字段可空性与默认值说明
-
-
-
-
----
-
-### [2026-03-18 13:46] · GitHub Copilot · 重命名 dim_channel 字段
-
-**摘要**：将 dim_channel 的 store_code 目标字段更名为 WING_CODE，并同步 ETL、DDL、测试与文档
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `etl_dim_channel.py` | 修改 | 目标列改为 WING_CODE |
-| `test_etl_automation.py` | 修改 | 校验改为查询 WING_CODE |
-| `SQL/create_dim_channel.sql` | 修改 | 字段名改为 WING_CODE |
-| `SQL/alter_dim_channel_rename_store_code_to_wing_code.sql` | 新增 | 现网字段改名迁移脚本 |
-| `README.md` | 修改 | 同步 dim_channel 字段名 |
-| `docs/DATA_CONTRACTS.md` | 修改 | 同步契约字段名 |
-| `docs/ETL业务逻辑说明.md` | 修改 | 同步映射字段名 |
-| `docs/MYSQL数据字典.md` | 修改 | 同步数据字典字段名 |
-| `docs/数据结构与映射手册.md` | 修改 | 同步字段映射说明 |
-| `docs/数据仓库与ETL手册.md` | 修改 | 同步建表结构 |
-| `CHANGELOG.md` | 修改 | 记录 v0.7.3 字段更名 |
-
-**Copilot 接棒须知**：
-- dim_channel 目标字段已由 store_code 更名为 WING_CODE。
-- 已新增 SQL/alter_dim_channel_rename_store_code_to_wing_code.sql 用于现网迁移。
-- Python 静态错误检查已通过。
-
-**未完成项**：
-- [ ] 执行 SQL/alter_dim_channel_rename_store_code_to_wing_code.sql 完成现网字段改名
-- [ ] 执行 etl_dim_channel.py 或 run_etl.py 验证 dim_channel.WING_CODE 已按 Oracle WING_CODE 回填
-
-
-
-
-
----
-
-### [2026-03-18 13:43] · GitHub Copilot · 修正 dim_channel 店仓映射
-
-**摘要**：将 dim_channel.store_code 从回退口径改为直接映射 O2O_RETAIL_CHANNEL.WING_CODE，并同步测试与文档
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `etl_dim_channel.py` | 修改 | store_code 改为直接抽取 WING_CODE |
-| `test_etl_automation.py` | 修改 | dim_channel 校验改为检查 store_code=DS001 |
-| `SQL/create_dim_channel.sql` | 修改 | 修正 store_code 字段注释来源 |
-| `README.md` | 修改 | 修正 dim_channel 字段说明 |
-| `docs/DATA_CONTRACTS.md` | 修改 | 修正 dim_channel 契约与DQ规则 |
-| `docs/ETL业务逻辑说明.md` | 修改 | 修正 dim_channel 映射逻辑说明 |
-| `docs/MYSQL数据字典.md` | 修改 | 修正 dim_channel 字段说明 |
-| `docs/数据结构与映射手册.md` | 修改 | 修正 WING_CODE 语义与直连映射说明 |
-| `CHANGELOG.md` | 修改 | 记录 v0.7.3 店仓映射修正 |
-
-**Copilot 接棒须知**：
-- 本次已改动 etl_dim_channel.py，不再使用 CODE 作为 store_code 回退值。
-- 已核实 Oracle BOSNDS3.O2O_RETAIL_CHANNEL 共 87 条记录且 WING_CODE 全部非空，因此直连映射不会减少记录数。
-- 目标库是否已完成真实回填仍需执行 etl_dim_channel.py 或 run_etl.py 验证。
-
-**未完成项**：
-- [ ] 在目标环境执行 etl_dim_channel.py 或 run_etl.py，确认 dim_channel.store_code 已按 WING_CODE 回填
-- [ ] 回填后复核 docs/TODO_ISSUES.md 的 P1-001 是否可关闭
-
-
-
-
-
-
----
-
-### [2026-03-18 13:28] · GitHub Copilot · 修正文档中的 dim_channel 结论
-
-**摘要**：将 P1-001 从已解决改为待验证，并澄清 O2O_RETAIL_CHANNEL 字段语义
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/TODO_ISSUES.md` | 修改 | 将 P1-001 调整为链路已补齐但目标库待回填验证 |
-| `docs/数据结构与映射手册.md` | 修改 | 补充 CODE/WING_CODE/NAME 语义与 DS 店仓编码说明 |
-| `docs/DATA_CONTRACTS.md` | 修改 | 修正 dim_channel 契约为目标设计已具备但实库待验证 |
-| `docs/ETL业务逻辑说明.md` | 修改 | 补充 dim_channel 链路已补齐但未验证写库 |
-| `docs/MYSQL数据字典.md` | 修改 | 标注 dim_channel 目标库现存数据待验证 |
-
-**Copilot 接棒须知**：
-- 本次仅修正文档结论，未改动 etl_dim_channel.py 与 run_etl.py 等 ETL 代码。
-- 当前高置信结论是 WING_CODE 更符合 DS001 这类店仓编码语义，CODE 应保留为渠道档案编码。
-- 若目标库 dim_channel.store_code 仍为纯数字，需要先执行 etl_dim_channel.py 回填，再决定是否关闭 P1-001。
-
-**未完成项**：
-- [ ] 在目标环境执行 etl_dim_channel.py 或 run_etl.py，验证 dim_channel.store_code 已回填为 DS 编码
-- [ ] 回填完成后重新评估并更新 docs/TODO_ISSUES.md 的 P1-001 状态
 
 
 

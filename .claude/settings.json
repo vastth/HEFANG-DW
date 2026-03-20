@@ -1,5 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {},
   "permissions": {
     "allow": [
       "Bash(python:*)",
@@ -17,6 +18,28 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "检查 tool_input.file_path 是否为 config.py，且 tool_input.old_string 或 tool_input.new_string 中包含 MAIN_CATEGORY_IDS 或 PROPERTY_ 等业务常量。如果是，必须先输出警告：⛔ 你正在修改业务常量，请先确认已获得业务侧确认，再继续操作。否则静默返回，不输出任何内容。",
+            "model": "haiku"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "检查 tool_input.file_path 是否包含 test_etl_automation，且 tool_input.old_string 中包含 assert。如果是，输出警告：⚠️ 你正在删除/修改测试断言，CLAUDE.md 禁止删除现有断言，请确认是新增而非删减。否则静默返回，不输出任何内容。",
+            "model": "haiku"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -40,5 +63,22 @@
       }
     ]
   },
-  "env": {}
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "claude-hud@claude-hud": true
+  }
 }

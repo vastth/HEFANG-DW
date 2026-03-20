@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # CLAUDE.md — 何方珠宝数据仓库（HEFANG-DW）Agent 协作规范
 
 > 本文件是 Claude Code / AI Copilot 的**项目级硬约束**。
@@ -27,18 +33,18 @@
 hefang_dw/                     ← 仓库根目录
 ├── config.py                  ← 配置中心（唯一真值源）
 ├── alerts.py                  ← 企业微信告警模块
-├── run_etl.py                 ← 主调度入口（7步流水线）
+├── run_etl.py                 ← 主调度入口（8步流水线）
 ├── run_ods.py                 ← ODS 专项调度
 ├── scheduled_etl.py           ← Windows 任务计划包装
 ├── run_scheduled_etl.bat      ← 任务计划触发脚本
 ├── etl_ods_*.py               ← ODS 层（fa_storage / m_retail / m_retailitem）
-├── etl_dim_*.py               ← DIM 层（product / sku / store）
+├── etl_dim_*.py               ← DIM 层（product / sku / store / channel）
 ├── etl_dws_*.py               ← DWS 层（sales / inventory）
 ├── etl_ads_health.py          ← ADS 层（库存健康度）
 ├── test_etl_automation.py     ← 验收测试
 ├── SQL/                       ← DDL & DML 脚本
 ├── tools/                     ← 连通测试、质检、快照工具
-├── scripts/                   ← 运维脚本（check_doc_sync.py、doctor.ps1、log_agent_action.py）
+├── scripts/                   ← 运维脚本（check_doc_sync.py、doctor.ps1、log_agent_action.py、log_agent_lesson.py）
 ├── docs/                      ← 技术文档（见下方文档地图）
 ├── .env.example               ← 环境变量模板（不含真实凭据）
 └── .claude/                   ← Agent 配置（本文件）
@@ -58,6 +64,11 @@ hefang_dw/                     ← 仓库根目录
 | docs/ETL业务逻辑说明.md | 各 ETL 模块逻辑说明 |
 | docs/MYSQL数据字典.md | MySQL 数仓表结构字典 |
 | docs/SQL开发手册.md | SQL 开发规范与模板 |
+| docs/AGENT_LESSONS.md | Agent 经验台帐（踩坑记录，供后续 Agent 避坑）|
+| docs/AGENT_HANDOFF_archive.md | 交接日志归档 |
+| docs/TODO_ISSUES.md | 待办与已知问题追踪 |
+| docs/达播数据运营上传指南.md | 达播业务数据上传操作指南 |
+| docs/何方珠宝_会员体系梳理.md | 会员体系业务梳理 |
 
 ---
 
@@ -70,6 +81,15 @@ hefang_dw/                     ← 仓库根目录
 3. **引用数据库表/字段前，必须对照 docs/MYSQL数据字典.md 或 docs/数据结构与映射手册.md**。
 4. **引用业务指标前，必须对照 docs/业务逻辑与指标规范.md**。
 5. **不得臆造不存在的函数、模块、命令或配置项**。
+
+---
+
+## 3.1 开发环境现实约束（硬约束）
+
+1. 当前公司开发环境下，用户是唯一负责数据库的人；**不得默认假设存在内部 DBA、内部运维或其他数据库开发同事**。
+2. Oracle 源库位于阿里云；MySQL 目标库与 `hefang_dw` 项目运行在公司服务器虚拟机，并由用户一手搭建。
+3. 当需要真实 `shuyun_ods` 结构、样本或推送事实时，先向用户索取其可直接导出的材料；若当前环境不存在该对象，再建议向数云方等外部对接方索取。
+4. 若用户已说明当前 MySQL 未落 CRM 表，则不得继续把本地 MySQL 当作 CRM 实证来源。
 
 ---
 
@@ -131,16 +151,19 @@ python scripts/log_agent_action.py \
 
 ## 5. 环境变量约定
 
-所有凭据通过环境变量注入，参考 `.env.example`：
+所有凭据通过环境变量注入：
 
+**`.env.example` 中定义（数据库连接）**：
 ```bash
 # Oracle（伯俊 ERP，数据源）
 ORACLE_USER, ORACLE_PASSWORD, ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE
 
 # MySQL（何方数仓，数据目标）
 MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_CHARSET
+```
 
-# 告警与调度
+**`config.py` 中通过 `os.getenv()` 读取（告警与调度）**：
+```bash
 WECHAT_WEBHOOK      # 企业微信机器人 Webhook（格式见 config.py 注释）
 ETL_MAX_RETRIES     # 重试次数，默认 3
 ETL_RETRY_SLEEP     # 重试间隔秒数，默认 60
@@ -203,7 +226,9 @@ ETL: dws_sales 新增双水位回填逻辑
 |-------|---------|---------|
 | `etl-auditor` | 「审计ETL」「检查口径」「核实字段映射」 | 只读（Read/Grep/Glob）|
 | `doc-syncer` | 「同步文档」「更新字典」「文档对齐」 | 读写（含 Write/Edit）|
-| `db-inspector` | 「检查表结构」「快照对比」 | 只读 + MySQL MCP（需配置）|
+| `db-inspector` | 「检查表结构」「快照对比」 | 只读 + MySQL MCP |
+| `data-query-agent` | 「帮我查数据」「导出样本」「核对单据」 | 只读 MCP + Python 回退 |
+| `data-reconciler` | 「对账」「比对行数」「漏数了吗」 | 只读 MySQL + Oracle MCP |
 
 ### Skills（斜杠命令）
 
@@ -214,9 +239,18 @@ ETL: dws_sales 新增双水位回填逻辑
 | `/doc-sync` | 检查并修复文档与代码的同步差异 | 修改 ETL/SQL 后 |
 | `/etl-audit [模块]` | ETL 完整审计，输出发现清单 | 上线前、口径评审 |
 | `/schema-snap` | 数据库结构快照 + 字典漂移检测 | 每周例行、DDL 变更后 |
+| `/data-query` | 路由数据查询（结构查询/固定对账/自由查数）| 需要查看数仓数据时 |
+| `/backfill` | 双水位历史回填工作流 | 补数、重跑历史数据 |
 
 ### Hooks（自动触发）
-- 修改 `etl_*.py` 或 `SQL/*.sql` 后，自动提醒运行 `/doc-sync` 和 `/handoff`
+
+**PreToolUse（编辑前拦截）**：
+- 修改 `config.py` 业务常量（`MAIN_CATEGORY_IDS`、`PROPERTY_*`）时发出警告
+- 修改 `test_etl_automation.py` 断言时发出警告
+
+**PostToolUse（编辑后提醒）**：
+- 修改 `etl_*.py` 或 `SQL/*.sql` 后，提醒运行 `/doc-sync` 和 `/handoff`
+- 修改任意文件后，触发经验复盘（自动检查是否需写入 `docs/AGENT_LESSONS.md`）
 
 ### MCP（数据库直连）
 配置文件：`.mcp.json`（不提交，env var 引用）

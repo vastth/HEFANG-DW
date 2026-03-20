@@ -53,6 +53,17 @@
 - 所有交互、解释、文档更新以及代码注释必须强制使用 **简体中文**。
 - 严禁在未经过用户明确要求的情况下输出英文解释。
 - 在进行文档同步时，保持技术术语的一致性，但描述性文字必须为中文。
+
+## 开发环境现实约束（硬约束）
+
+- 当前公司开发环境下，**用户是唯一负责数据库的人**；禁止默认假设存在可直接协作的内部 DBA、内部运维或其他数据库开发同事。
+- Oracle 源库部署在阿里云；MySQL 目标库以及 `hefang_dw` 项目运行环境由用户在公司服务器虚拟机上一手搭建。
+- 当任务需要真实数据库结构、真实样本、推送链路事实时，优先顺序固定为：
+   1. 用户当前已掌握或能直接从环境导出的材料
+   2. 用户可自行从目标环境执行的查询结果
+   3. 若本地或公司环境不存在该对象，再建议向外部对接方（如数云方）索取
+- 禁止再建议“让公司同事、DBA、运维帮忙查”这类默认内部协同路径，除非用户明确说明存在相应角色。
+- 禁止在没有证据时默认认为本地 MySQL 已存在 `shuyun_ods`、`fdi_*` 或其他 CRM 落库对象；必须以用户提供的环境事实、截图、SQL 输出或实表证据为准。
 ---
 
 ## 一、触发同步的变更（必须同步文档）
@@ -93,6 +104,7 @@
 - [ ] `docs/DATA_CONTRACTS.md` — 表粒度/主键/水位/DQ规则是否最新
 - [ ] `docs/RUNBOOK.md` — 命令/环境变量/报错处理是否有效
 - [ ] `docs/MYSQL数据字典.md` — 字段清单是否最新
+- [ ] `docs/HFSY数据字典.md` — 数云源侧实表结构与字段字典是否最新
 - [ ] `docs/数据结构与映射手册.md` — 字段来源映射是否正确
 - [ ] `docs/业务逻辑与指标规范.md` — 口径/公式/枚举是否一致
 - [ ] `docs/数据仓库与ETL手册.md` — 流程/调度/参数是否准确
@@ -101,6 +113,7 @@
 - [ ] `README.md` — 入口信息/示例/配置是否过期
 - [ ] `docs/TODO_ISSUES.md` — P0/P1/P2 待办与风险是否更新
 - [ ] `docs/AGENT_LESSONS.md` — 本轮是否产生了应沉淀的经验台帐
+- [ ] `docs/misc/superpowers内化会议纪要.md` — Copilot 能力设计讨论结论与阶段方案是否最新
 - [ ] 若新增 `docs/*.md`，必须将新文档补充到本清单并纳入同步范围
 
 ## 五、版本记录格式（统一）
@@ -154,9 +167,9 @@
 - 每次修订必须引用本轮 JSON（作为输入证据）。
 - 审计命令：`python scripts/check_doc_sync.py --output reports/docs_code_alignment.json`
 - 提交/合并前必须更新该 JSON（与文档修订同步）。
-- 证据引用格式示例：来源：[run_etl.py](run_etl.py#L43-L51)
+- 证据引用格式示例：来源：[run_etl.py](../run_etl.py)
 - 数据库结构对齐时，必须落盘快照：`reports/snapshot_mysql_hefangdw_schema.json` 与 `reports/snapshot_oracle_bosnds3_schema.json`，并在文档中引用快照时间作为证据。
-- 当用户要求审计对齐文档时，必须先询问是否调用快照脚本生成数据库快照（用户可选择跳过或执行）。来源：[tools/snapshot_mysql_hefangdw_schema.py](tools/snapshot_mysql_hefangdw_schema.py#L1-L8)；[tools/snapshot_oracle_bosnds3_schema.py](tools/snapshot_oracle_bosnds3_schema.py#L1-L9)
+- 当用户要求审计对齐文档时，必须先询问是否调用快照脚本生成数据库快照（用户可选择跳过或执行）。来源：[tools/snapshot_mysql_hefangdw_schema.py](../tools/snapshot_mysql_hefangdw_schema.py)；[tools/snapshot_oracle_bosnds3_schema.py](../tools/snapshot_oracle_bosnds3_schema.py)
 
 ## 版本记录
 
@@ -173,3 +186,6 @@
 | v1.8 | 2026-03-01 | 增加新增文档需同步更新清单要求 |
 | v1.9 | 2026-03-01 | 新增"零、接棒协议"—强制读写 AGENT_HANDOFF.md，实现双 Agent 状态共享 |
 | v2.0 | 2026-03-01 | 新增待办清单与 P0 预警要求 |
+| v2.1 | 2026-03-19 | 增加单人负责数据库的环境现实约束，禁止默认假设存在内部 DBA/运维协同 |
+| v2.2 | 2026-03-20 | 将 superpowers 内化会议纪要纳入文档同步检查清单 |
+| v2.2 | 2026-03-20 | 新增 docs/HFSY数据字典.md 到文档同步检查清单 |

@@ -5,6 +5,26 @@
 
 ## 2026-03-18
 
+### v0.7.8 — 新增 HFSY 数据字典（2026-03-20）
+
+#### Docs
+- 新增 `docs/HFSY数据字典.md`，基于 `reports/snapshot_mysql_hfsy_schema.json` 记录数云 `hfsy` 实库的表、字段、注释、键与当前行数。
+- `docs/misc/数云CRM数据接入实施计划.md` 补充 `hfsy` 快照与数据字典产物，明确后续字段映射和实施设计应直接引用这两份审计产物。
+
+### v0.7.7 — 数云 CRM 实表证据校正（2026-03-20）
+
+#### Docs
+- `docs/misc/数云CRM数据接入实施计划.md` 纳入数云 xlsx 与 `hfsy` 实表证据，确认当前真实源表为 `t_member_info`、`t_member_bind_info`、`t_trade`、`t_order`、`t_pin_xid_rel`、`sys_area`。
+- 将数云侧 MySQL 版本前提从“建议 8.0+”纠偏为“当前实表运行在 5.7.42，实施必须保持 5.7 兼容”。
+
+### v0.7.6 — 单人数据库环境约束（2026-03-19）
+
+#### Changed
+- `.github/copilot-instructions.md`、`AGENTS.md`、`.claude/CLAUDE.md` 增加当前开发环境的现实约束：用户为唯一数据库负责人，禁止默认假设存在内部 DBA / 运维协同。
+
+#### Docs
+- `docs/ARCHITECTURE.md` 补充 Oracle 位于阿里云、MySQL 与 `hefang_dw` 运行在公司服务器虚拟机的部署边界，以及 CRM 实证材料索取路径。
+
 ### v0.7.5 — 经验台帐与复盘机制（2026-03-18）
 
 #### Added
