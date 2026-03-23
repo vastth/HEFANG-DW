@@ -64,7 +64,11 @@ def extract_from_oracle(start_date, end_date):
     logger.info(f"执行SQL查询（日期范围：{start_date} - {end_date}）...")
     cursor = conn.cursor()
     cursor.execute(sql)
-    columns = [col[0].lower() for col in cursor.description]
+    description = cursor.description or []
+    columns = []
+    for column in description:
+        column_name = column[0]
+        columns.append(column_name.lower() if isinstance(column_name, str) else str(column_name).lower())
     data = cursor.fetchall()
     df = pd.DataFrame(data, columns=columns)
     
