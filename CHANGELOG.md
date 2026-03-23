@@ -5,16 +5,159 @@
 
 ## 2026-03-18
 
+### v0.8.11 — 收敛第二阶段 agent 描述（2026-03-23）
+
+#### Changed
+- 收敛 `.github/agents/*.agent.md` 的 description，补齐更贴近真实提问方式的触发词，减少 agent picker 与自然语言发现时的歧义。
+- 保持 5 个 agent 的职责边界不变，本轮重点放在“更容易被找到和看懂”，而不是继续扩张工具或职责范围。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 更新为“hooks 已按逻辑正常执行，本轮推进重心切回第二阶段 agents 可发现性与 description 收敛”。
+
+### v0.8.10 — 新增 Stop 收口提醒试点（2026-03-23）
+
+#### Added
+- 扩展 `.github/hooks/post-edit-reminder-hefang.json`，新增 `Stop` 事件，接入 `scripts/copilot_session_close_reminder.ps1`。
+- 新增 `scripts/copilot_session_close_reminder.ps1`，基于 `PostToolUse` 日志中的最近命中类型，在会话收口时输出非阻断提醒。
+
+#### Changed
+- `Stop` 提醒不直接依赖当前工作树脏状态，而是复用 `logs/copilot_post_edit_reminder.log` 作为最近编辑证据，降低历史未提交改动带来的误报。
+- 为避免同一组命中类型在短时间内重复刷屏，新增最近签名去重状态文件 `logs/copilot_session_close_reminder_state.json`。
+- 在真实 Copilot 会话中已确认 `Warning from Stop hook` 会显示；同时发现 PowerShell 非零 stderr 的中文文案在宿主 UI 中存在乱码，因此将 Stop 提示文案收敛为 ASCII，优先保证可读性。
+- 为进一步降低 Stop warning 卡片中的 PowerShell 错误格式噪音，将 `Stop` 事件的顶层调用从 `pwsh` 切为 `cmd` 包装脚本 `scripts/copilot_session_close_reminder.cmd`，尽量收敛额外的宿主错误元信息。
+- 在继续复测后，确认 `cmd` 包装层仍不足以消除宿主中的 `NativeCommandError` 风格噪音，因此将 `Stop` 实现切换为 `python` 脚本，并改走标准输出 + 非零退出码链路，进一步绕开 PowerShell 错误包装。
+- 将 `PostToolUse` 事件也切换为 `python` 脚本 `scripts/copilot_post_edit_reminder.py`，并把旧的 `pwsh` 与 `cmd` 入口保留为兼容包装层，减少宿主未热更新配置时继续报旧路径错误的概率。
+- 进一步复测发现：当前宿主下 `stdout + exit 1` 会落日志但不稳定展示 warning 卡片，因此将 Python 版 `PostToolUse` 与 `Stop` 的提示输出切回 `stderr`，继续保留 Python 实现以避免 PowerShell 编码与包装噪音。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 补充第二个提醒型 hook 试点，并将当前版本推进到 `v0.17`。
+
+### v0.8.9 — 继续细分 PostToolUse docs 规则（2026-03-23）
+
+#### Changed
+- 继续扩展 `scripts/copilot_post_edit_reminder.ps1` 的 docs 匹配规则，在原有会议纪要类、运行文档类、README 类基础上，新增 `data-dictionary` 与 `governance-docs` 两类。
+- 将 `MYSQL数据字典.md`、`HFSY数据字典.md` 从运行文档中拆出，将 `AGENT_HANDOFF.md`、`AGENT_LESSONS.md`、`TODO_ISSUES.md` 从运行文档中拆出，使提醒动作更贴近真实收口差异。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 补充 docs 二次细分结论，并将当前版本推进到 `v0.16`。
+
+### v0.8.8 — 细分 PostToolUse docs 提醒规则（2026-03-23）
+
+#### Changed
+- 扩展 `scripts/copilot_post_edit_reminder.ps1` 的 docs 匹配优先级，将原先统一的 `doc` 提醒细分为 `meeting-minutes`、`runbook-docs`、`readme` 与兜底 `doc` 四类。
+- 为会议纪要类、运行文档类和 README 分别提供更贴近收口动作的提醒文案，降低文档提醒过粗带来的噪音。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 补充 PostToolUse docs 细粒度规则扩展，并将当前版本推进到 `v0.15`。
+
+### v0.8.7 — 调整 PostToolUse warning 返回策略（2026-03-23）
+
+#### Changed
+- 将 `scripts/copilot_post_edit_reminder.ps1` 在命中提醒场景下的返回方式从“退出码 0 + JSON `systemMessage`”调整为“非阻断 warning 退出码 + stderr 文案”，以提高 GitHub Copilot UI warning 的展示概率。
+- 保留未命中场景的 `{"continue":true}` JSON 成功返回，避免无关编辑被误判为 warning。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 补充 PostToolUse warning 展示排障结论，明确 `systemMessage` 不等同于稳定的 UI warning 卡片，并记录新的试验策略。
+
+### v0.8.6 — 扩展 PostToolUse 提醒粒度（2026-03-23）
+
+#### Changed
+- 扩展 `scripts/copilot_post_edit_reminder.ps1` 的 `PostToolUse` 提醒规则，新增 Copilot 自定义能力文件修改场景。
+- ETL 提醒补充“最小验证”提示，SQL 提醒补充 `doc-sync`，docs 提醒补充“必要复扫”提示。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 补充 `PostToolUse` 第一轮扩展范围，并明确当前 UI 展示不稳定时应以日志作为执行真值。
+
+### v0.8.5 — 最小提醒型 hook 试点与阶段收口 prompt（2026-03-20）
+
+#### Added
+- 新增 `.github/hooks/post-edit-reminder-hefang.json`，作为第三阶段首个 `PostToolUse` 提醒型 hook 试点。
+- 新增 `scripts/copilot_post_edit_reminder.ps1`，对 ETL、SQL、docs 和 README 编辑输出非阻断收口提醒。
+- 新增 `.github/prompts/stage-close-hefang.prompt.md`，为阶段收口检查提供 prompt 入口。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 记录首个提醒型 hook 试点的行为边界，并补充阶段收口检查 prompt 的定位。
+
+### v0.8.4 — 第三阶段 hooks 设计稿与会议纪要 prompt（2026-03-20）
+
+#### Added
+- 新增 `.github/prompts/meeting-minutes-hefang.prompt.md`，将 superpowers / Copilot 能力设计讨论后的会议纪要更新沉淀为单任务 prompt。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 新增第三阶段 hooks 设计稿，明确提醒型、守门型、自动执行型的分层推进建议与当前不启用边界。
+- `docs/misc/superpowers内化会议纪要.md` 记录 `meeting-minutes-hefang` prompt 的定位与用途。
+
+### v0.8.3 — 新增运行时验收 prompt（2026-03-20）
+
+#### Added
+- 新增 `.github/prompts/runtime-acceptance-hefang.prompt.md`，将 Copilot 自定义能力的运行时验收步骤沉淀为可复用 prompt。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 补充运行时验收 prompt 的定位、边界与当前用途。
+
+### v0.8.2 — Copilot 第二阶段启动（2026-03-20）
+
+#### Added
+- 新增 `.github/agents/planner-hefang.agent.md`，为需求澄清、范围界定与实施顺序规划提供角色化入口。
+- 新增 `.github/agents/etl-auditor-hefang.agent.md`，为 ETL、调度与测试审计提供只读代理入口。
+- 新增 `.github/agents/doc-syncer-hefang.agent.md`，为文档差异归类与修订执行提供角色化入口。
+- 新增 `.github/agents/db-inspector-hefang.agent.md`，为快照、结构文档与数据库证据核对提供结构探查入口。
+- 新增 `.github/agents/reviewer-hefang.agent.md`，为交付前 review、风险复查与收口检查提供评审入口。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 将第一阶段验收收口为“按用户判定通过、自动触发稳定性保留观察项”，并记录第二阶段 custom agents 已启动。
+
+### v0.7.12 — 重命名 CRM 上下文主文档（2026-03-20）
+
+#### Docs
+- 将 `docs/misc/数云CRM数据接入实施计划.md` 重命名为 `docs/misc/数云CRM实施上下文与下一步执行入口.md`，作为切换对话窗口时的统一上下文入口文件。
+- 在该文件新增“当前阶段快照”“当前推进进度”“下一步执行入口”“新对话承接方式”，用于后续直接衔接实现阶段。
+
+### v0.7.11 — 补证 HFSY 实表空值与 copy 表重叠（2026-03-20）
+
+#### Docs
+- `docs/misc/数云CRM实施上下文与下一步执行入口.md` 纳入三项全表补证结果：`t_member_bind_info` 的 `*1` 列与 `DecryptionTags` 当前全空、`modified` 字符串时间列无空值和异常格式、`t_order_copy*` 与 `t_order` 按 `order_item_id` 100% 重叠。
+- `docs/HFSY数据字典.md` 更新使用说明，明确 `*1` 列当前不可依赖，`t_order_copy` 与 `t_order_copy1` 当前应排除出正式消费链路。
+
+### v0.8.0 — Copilot 第一阶段启动（2026-03-20）
+
+#### Added
+- 新增 `.github/instructions/python-etl.instructions.md`，将 ETL / 调度 / ETL 自动化测试的领域规则从全局总指令中拆出。
+- 新增 `.github/skills/planning-hefang/SKILL.md`，为复杂 ETL / 审计 / 文档同步任务提供“先规划、后实施”的统一入口。
+- 新增 `.github/skills/etl-audit-hefang/SKILL.md`，为字段映射、增量逻辑、幂等性和文档同步风险提供只读审计入口。
+- 新增 `.github/skills/doc-sync-hefang/SKILL.md`，为代码与文档一致性检查提供统一入口。
+- 新增 `.github/skills/completion-check-hefang/SKILL.md`，为任务结束前的验证、交接与经验沉淀检查提供统一入口。
+
+#### Changed
+- `.github/copilot-instructions.md` 明确“全局常驻规则”与“ETL 专用 file instructions”的分层关系。
+
+#### Docs
+- `docs/misc/superpowers内化会议纪要.md` 由“讨论中”更新为“第一阶段实施中”，并记录首个落地点与下一滚动项。
+- `docs/misc/superpowers内化会议纪要.md` 新增第一阶段静态验收结果、运行时人工验收步骤与判定标准。
+
+### v0.7.10 — 同步 HFSY 连接上下文（2026-03-20）
+
+#### Docs
+- `docs/HFSY数据字典.md` 补充 `hfsy` 实库连接元信息，明确当前版本为 MySQL `5.7.42`、地址为 `8.134.87.152:33066`、数据库名为 `hfsy`、接入账号为 `shuyun668`。
+- `docs/misc/数云CRM实施上下文与下一步执行入口.md` 新增源端连接事实章节，并明确真实密码只作为会话事实存在，不落盘到 git 跟踪文档。
+- `docs/RUNBOOK.md` 新增 `hfsy` 只读探查的临时环境变量约定与查询示例。
+
+### v0.7.9 — 数云 CRM 审计发现清单（2026-03-20）
+
+#### Docs
+- `docs/misc/数云CRM实施上下文与下一步执行入口.md` 新增“当前审计发现清单”，按 High / Medium / Low 与待补证项固化当前实现边界。
+- 将实施计划版本推进到 `v2.5`，明确第一阶段可直接开工、必须延后和仍需补证的对象范围。
+
 ### v0.7.8 — 新增 HFSY 数据字典（2026-03-20）
 
 #### Docs
 - 新增 `docs/HFSY数据字典.md`，基于 `reports/snapshot_mysql_hfsy_schema.json` 记录数云 `hfsy` 实库的表、字段、注释、键与当前行数。
-- `docs/misc/数云CRM数据接入实施计划.md` 补充 `hfsy` 快照与数据字典产物，明确后续字段映射和实施设计应直接引用这两份审计产物。
+- `docs/misc/数云CRM实施上下文与下一步执行入口.md` 补充 `hfsy` 快照与数据字典产物，明确后续字段映射和实施设计应直接引用这两份审计产物。
 
 ### v0.7.7 — 数云 CRM 实表证据校正（2026-03-20）
 
 #### Docs
-- `docs/misc/数云CRM数据接入实施计划.md` 纳入数云 xlsx 与 `hfsy` 实表证据，确认当前真实源表为 `t_member_info`、`t_member_bind_info`、`t_trade`、`t_order`、`t_pin_xid_rel`、`sys_area`。
+- `docs/misc/数云CRM实施上下文与下一步执行入口.md` 纳入数云 xlsx 与 `hfsy` 实表证据，确认当前真实源表为 `t_member_info`、`t_member_bind_info`、`t_trade`、`t_order`、`t_pin_xid_rel`、`sys_area`。
 - 将数云侧 MySQL 版本前提从“建议 8.0+”纠偏为“当前实表运行在 5.7.42，实施必须保持 5.7 兼容”。
 
 ### v0.7.6 — 单人数据库环境约束（2026-03-19）

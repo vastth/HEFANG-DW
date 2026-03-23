@@ -64,6 +64,11 @@
    3. 若本地或公司环境不存在该对象，再建议向外部对接方（如数云方）索取
 - 禁止再建议“让公司同事、DBA、运维帮忙查”这类默认内部协同路径，除非用户明确说明存在相应角色。
 - 禁止在没有证据时默认认为本地 MySQL 已存在 `shuyun_ods`、`fdi_*` 或其他 CRM 落库对象；必须以用户提供的环境事实、截图、SQL 输出或实表证据为准。
+
+## Copilot 能力分层
+
+- `copilot-instructions.md` 只保留全局常驻规则。
+- ETL / 调度 / ETL 自动化测试相关规则已拆分到 `.github/instructions/python-etl.instructions.md`，后续优先在对应 file instructions 中扩展领域细节，而不是继续堆叠到本文件。
 ---
 
 ## 一、触发同步的变更（必须同步文档）

@@ -46,6 +46,29 @@ python -c "import oracledb, pandas, sqlalchemy, pymysql; print('OK')"
 [Environment]::SetEnvironmentVariable('WECHAT_WEBHOOK', 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY', 'User')
 ```
 
+### 1.2.1 HFSY 只读探查连接事实
+
+当前已确认的数云源端连接元信息如下：
+
+- 数据库版本：MySQL `5.7.42`
+- 部署地址：`8.134.87.152:33066`
+- 数据库名：`hfsy`
+- 接入账号：`shuyun668`
+
+真实密码已由用户提供，但按仓库安全约束，不写入任何被 git 跟踪的文档、脚本或模板文件。推荐在本地终端按会话临时注入：
+
+```powershell
+$env:HFSY_MYSQL_HOST='8.134.87.152'
+$env:HFSY_MYSQL_PORT='33066'
+$env:HFSY_MYSQL_USER='shuyun668'
+$env:HFSY_MYSQL_PASSWORD='请通过本地安全方式注入真实密码'
+$env:HFSY_MYSQL_DB='hfsy'
+```
+
+说明：
+- 当前仓库脚本尚未正式消费 `HFSY_MYSQL_*` 变量；这些变量主要用于保存只读探查上下文，避免和数仓库 `MYSQL_*` 混用。
+- 若临时复用 [tools/query_data.py](../tools/query_data.py)，应在独立终端里临时覆盖 `MYSQL_*` 到 `hfsy`，执行完成后关闭该终端，避免误连到生产数仓。
+
 ### 1.3 连通性验证
 
 ```powershell
@@ -157,6 +180,17 @@ python tools/query_data.py --sql "SELECT snapshot_date, product_code, total_qty 
 
 # 导出指定快照的 ADS 数据
 python tools/export_ads.py --snapshot-date 20260318 --output reports/output.xlsx
+```
+
+若需要对 `hfsy` 做一次性只读探查，可在独立终端临时覆盖 `MYSQL_*` 后执行：
+
+```powershell
+$env:MYSQL_HOST='8.134.87.152'
+$env:MYSQL_PORT='33066'
+$env:MYSQL_USER='shuyun668'
+$env:MYSQL_PASSWORD='请通过本地安全方式注入真实密码'
+$env:MYSQL_DB='hfsy'
+python tools/query_data.py --source mysql --sql "SELECT COUNT(*) AS row_cnt FROM t_member_info"
 ```
 
 结构快照命令：
@@ -414,6 +448,7 @@ python tools/check_ods_incremental.py
 
 | 版本 | 日期 | 变更内容 |
 |------|------|----------|
+| v1.5 | 2026-03-20 | 补充 hfsy 源端连接事实、临时环境变量约定与只读探查示例 |
 | v1.0 | 2026-03-18 | 初版运行手册 |
 | v1.1 | 2026-03-18 | 新增 MCP 与只读查数说明、结构快照与导出命令 |
 | v1.2 | 2026-03-18 | 新增经验台帐写入命令、复盘规则与 Hook 说明 |

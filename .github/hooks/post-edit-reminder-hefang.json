@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "python .\\scripts\\copilot_post_edit_reminder.py",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python .\\scripts\\copilot_session_close_reminder.py",
+        "timeout": 10
+      }
+    ]
+  }
+}
+

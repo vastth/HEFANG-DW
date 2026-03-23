@@ -27,205 +27,130 @@
 
 ---
 
-### [2026-03-20 10:35] · GitHub Copilot · 新增 superpowers 内化会议纪要
+### [2026-03-23 15:35] · GitHub Copilot · 审计当前 ETL 链路打通情况
 
-**摘要**：将 GitHub Copilot 能力内化讨论沉淀为持续更新的会议纪要文档，确认采用三阶段推进方案
+**摘要**：确认 ODS 仍为独立链路，主自动化链仅覆盖 DIM/DWS/达播检查/ADS，且当前 DWS/DIM 运行时未消费 ODS。
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/misc/superpowers内化会议纪要.md` | 新增 | 记录 superpowers 内化目标、三阶段方案、能力映射与后续更新规则 |
-| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮会议纪要建档交接记录 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮只读链路审计结论 |
 
 **Copilot 接棒须知**：
-- 后续凡涉及 Copilot 自定义能力、superpowers 方法论迁移、skills / agents / hooks 分层设计的讨论，优先更新 `docs/misc/superpowers内化会议纪要.md`。
-- 当前仍处于方案讨论阶段，尚未创建 `.github/instructions/`、`.github/prompts/`、`.github/agents/` 或 `.github/skills/` 的新能力文件。
+- scheduled_etl.py 当前只调 run_etl.py，未串 run_ods.py。
+- run_etl.py 主链步骤不含任何 ods 任务，ODS 仍需独立调度。
+- etl_dws_sales.py 与 etl_dws_inventory.py 当前仍直连 Oracle，未切到消费 ods_m_retail/ods_m_retailitem/ods_fa_storage。
+- ADS 已消费 DWS 与 DIM，因此主链内部 DIM→DWS→ADS 是连通的，但 ODS→DWS/DIM 尚未打通。
 
 **未完成项**：
-- [ ] 细化第一阶段 5 个能力的详细规格（名称、触发语、输入、输出、边界、是否调用脚本）
-- [ ] 设计 `.github` 下未来 Copilot 自定义能力的目录分层
+- [ ] 如需真正打通自动化全链路，先明确 run_ods.py 与 run_etl.py 的调度前后关系及失败策略。
+- [ ] 如需真正让 ODS 成为事实源，需要把 dws_sales/dws_inventory 改为从 ODS 聚合，并评估 dim 是否仍保持直连 Oracle。
 
 ---
 
-### [2026-03-20 10:51] · GitHub Copilot · 补充 hfsy 数据字典与实表审计产物
+### [2026-03-23 11:45] · GitHub Copilot · 继续推进第二阶段 agent 内化
 
-**摘要**：新增 HFSY 数据字典与 hfsy 结构快照，并把它们纳入数云 CRM 实施计划的主证据链。
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `reports/snapshot_mysql_hfsy_schema.json` | 新增 | hfsy 实库结构快照，记录表、字段、键和行数 |
-| `docs/HFSY数据字典.md` | 新增 | 基于 hfsy 实库快照生成源侧表字段数据字典 |
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 补充 hfsy 快照与 HFSY 数据字典为第 2 轮实表校正证据 |
-| `CHANGELOG.md` | 修改 | 记录 v0.7.8 新增 HFSY 数据字典 |
-| `.github/copilot-instructions.md` | 修改 | 将 docs/HFSY数据字典.md 纳入文档同步检查清单 |
-
-**Copilot 接棒须知**：
-- 后续 CRM 设计应优先引用 reports/snapshot_mysql_hfsy_schema.json 与 docs/HFSY数据字典.md；当前仍需补充 t_member_bind_info 的 *1 列覆盖率统计，以及确认 t_order_copy / t_order_copy1 是否仅为备份表。
-
-**未完成项**：
-- [ ] 继续做 hfsy 行级抽样与字段覆盖率探查
-- [ ] 确认 t_order_copy 与 t_order_copy1 的正式链路角色
-- [ ] 若继续实现 CRM ETL，按 hfsy.t_member_info / t_member_bind_info / t_pin_xid_rel 作为第一阶段输入
-
----
-
-### [2026-03-20 09:50] · GitHub Copilot · 校正数云CRM实表依据
-
-**摘要**：纳入 hfsy 实表与 xlsx 证据，修正 CRM 实施计划对标准方案和 MySQL 8.0 的过度假设
+**摘要**：收敛 5 个 agent 的 description，并把推进重心切回 agents 可发现性验收
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 纳入 hfsy 实表与 xlsx 证据，切换到第 2 轮实表校正 |
-| `CHANGELOG.md` | 修改 | 记录 v0.7.7 数云 CRM 实表证据校正 |
-| `docs/AGENT_LESSONS.md` | 修改 | 记录标准方案不能替代真实实表的经验 |
+| `.github/agents/planner-hefang.agent.md` | 修改 | 补充更贴近真实提问的触发词 |
+| `.github/agents/etl-auditor-hefang.agent.md` | 修改 | 补充字段血缘和自然语言触发词 |
+| `.github/agents/doc-syncer-hefang.agent.md` | 修改 | 补充数据字典与补文档类触发词 |
+| `.github/agents/db-inspector-hefang.agent.md` | 修改 | 补充结构漂移与快照核对触发词 |
+| `.github/agents/reviewer-hefang.agent.md` | 修改 | 补充风险评审类自然语言触发词 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新当前状态为 hooks 通过并切回第二阶段 agent 收敛 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.11 记录 agent description 收敛 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 agent description 应贴近真实提问方式的经验 |
 
 **Copilot 接棒须知**：
-- 后续 CRM 开发起点应从 `hfsy.t_member_info`、`hfsy.t_member_bind_info`、`t_pin_xid_rel` 出发，不再以 `fdi_*` JSON 表作为当前唯一事实源。
-- 下一步优先做样例行级探查与 modified 字段质量检查，确认 *1 解密列覆盖率和 order_copy 表是否为备份。
+- 当前 hooks 不再作为阶段阻断项，后续第三阶段只在不破坏现有逻辑的前提下再做体验优化。
+- 下一步优先在 agent picker 和自然语言场景里观察 5 个 agent 是否更容易被找到和理解。
 
 **未完成项**：
-- [ ] 对 hfsy 核心表抽样 5~10 行，验证 modified 时间串格式、platCode 分布和 *1 字段覆盖率
-- [ ] 确认 t_order_copy 与 t_order_copy1 是否只是备份表，正式链路是否只消费 t_order
+- [ ] 在 VS Code Copilot 的 agent picker 中复测 5 个 agent 的可见性与描述可理解性
+- [ ] 根据真实使用反馈继续收窄各 agent 的 tools 集合，避免授权过宽
 
 
 ---
 
-### [2026-03-19 18:11] · GitHub Copilot · 补充环境现实约束并生成数云方索取模板
+### [2026-03-23 11:41] · GitHub Copilot · 确认 hooks 按逻辑正常执行
 
-**摘要**：将单人负责数据库的环境边界写入项目硬约束，并为数云方准备可直接发送的资料索取模板
+**摘要**：用户已确认 Stop 与 PostToolUse 都能出现，本轮验收以 hooks 按逻辑运行作为通过标准
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `.github/copilot-instructions.md` | 修改 | 增加单人负责数据库与外部取证优先级硬约束 |
-| `AGENTS.md` | 修改 | 增加环境现实约束与CRM取证路径 |
-| `.claude/CLAUDE.md` | 修改 | 为Claude侧补充单人数据库环境硬约束 |
-| `docs/ARCHITECTURE.md` | 修改 | 补充Oracle/VM部署边界与CRM实证来源限制 |
-| `CHANGELOG.md` | 修改 | 记录v0.7.6环境约束更新 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮 hooks 运行验收结论 |
 
 **Copilot 接棒须知**：
-- 后续涉及CRM实证时，不再默认存在内部DBA或同事；优先向用户索取本地可导出材料，若环境无对象再转向数云方。
+- 当前不再继续纠结 warning 卡片的 UI 细节，后续以日志命中、去重行为和真实触发结果作为主要验收依据。
+- Stop 与 PostToolUse 当前都已有真实触发证据；若后续再调 UI 展示，属于体验优化，不影响本轮通过。
 
 **未完成项**：
-- [ ] 如进入CRM第2轮审计，先向数云方索取真实建表SQL、关键表样本与xid/商品类目表确认。
+- [ ] 若后续继续优化，仅在不破坏当前触发逻辑的前提下收敛 UI 文案或噪音
 
 
 
 ---
 
-### [2026-03-19 18:35] · GitHub Copilot · 完成CRM第1轮字段级仲裁
+### [2026-03-23 11:21] · GitHub Copilot · 收敛 Copilot hooks Python 化兼容层
 
-**摘要**：完成 12 张数云 ODS 表的字段级仲裁矩阵，区分已可设计、待实表验证与标准方案文档自身缺口三类对象
+**摘要**：将 PostToolUse 切到 Python，并为旧的 pwsh/cmd 路径补齐兼容包装层
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 新增第 1 轮 12 表字段级仲裁矩阵、发现清单与待确认项 |
-| `docs/AGENT_LESSONS.md` | 修改 | 记录外部接入表不应一律视为可直接设计的经验 |
+| `.github/hooks/post-edit-reminder-hefang.json` | 修改 | PostToolUse 与 Stop 主入口统一收敛到 Python |
+| `scripts/copilot_post_edit_reminder.py` | 新增 | 新增 Python 版 PostToolUse 提醒主实现 |
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 改为转发到 Python 的兼容包装层 |
+| `scripts/copilot_session_close_reminder.ps1` | 修改 | 改为转发到 Python 的兼容包装层 |
+| `scripts/copilot_session_close_reminder.cmd` | 新增 | 恢复 Stop 旧 cmd 路径兼容包装层 |
+| `CHANGELOG.md` | 修改 | 记录 PostToolUse Python 化与兼容层策略 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新当前 hooks 主实现状态 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录宿主配置滞后时需保留旧入口兼容层的经验 |
 
 **Copilot 接棒须知**：
-- 第一阶段真正可直接进入实现设计的核心对象仍是 `fdi_member_info` 与 `fdi_jos_pin_xid`，订单链路属于第二阶段扩展。
-- 若继续第 2 轮，应优先索取真实 `shuyun_ods` 建表 SQL、`SHOW CREATE TABLE` 或脱敏样本，验证 `fdi_refund`、`fdi_rate`、`fdi_member_point_his`、`fdi_member_grade_his` 和商品类目表。
+- 当前 Stop 与 PostToolUse 主实现均已切到 Python，但需在真实 Copilot UI 中再观察宿主噪音是否下降。
+- 若当前会话仍沿用旧 hook 配置，兼容包装层已可避免旧 cmd/ps1 路径缺失导致的额外报错。
 
 **未完成项**：
-- [ ] 进入第 2 轮时，用真实 `shuyun_ods` 实表或样本验证 5 类残留问题：`member_id` 映射、`refund` 账号字段、`xid` 真实形态、包裹密文覆盖范围、商品类目表真实表名。
+- [ ] 在真实 Copilot 会话中复测 Python 版 Stop warning 卡片是否更干净
+- [ ] 在真实 Copilot 会话中复测 PostToolUse warning 是否摆脱 pwsh NativeCommandError 风格噪音
+- [ ] 根据真实 UI 结果决定何时移除旧的 pwsh/cmd 兼容包装层
 
 
 
 
 ---
 
-### [2026-03-19 18:18] · GitHub Copilot · 修正CRM计划版本漂移
+### [2026-03-23 11:08] · GitHub Copilot · 确认 Stop UI 可见并修正提示可读性
 
-**摘要**：在继续细审前修正实施计划文首版本号与版本记录不一致的问题
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 将文首当前版本从 v2.1 修正为 v2.2，与版本记录一致 |
-
-**Copilot 接棒须知**：
-- 当前实施计划正文与版本表已按 v2.2 审计结果对齐。
-- 后续如继续细审，应重点处理“真实 ODS 实表/样本是否与仲裁文档一致”这一层，而不是再做文案级修词。
-
-**未完成项**：
-- [ ] 若需宣称与仲裁文档 100% 对齐，下一步必须引入真实 `shuyun_ods` 实表或样本数据做字段级核验。
-
-
-
-
----
-
-### [2026-03-19 18:10] · GitHub Copilot · 再审计数云CRM实施计划
-
-**摘要**：依据三个仲裁文档、当前代码库与数据库快照，再次修正数云CRM实施计划中的过期事实、无效证据链与配置过度设计问题
+**摘要**：真实 Copilot 会话已观察到 Warning from Stop hook，并将 Stop 提示文案收敛为 ASCII 以规避 stderr 中文乱码。
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 修正 `.env.example` 现状、移除不存在的 R10 证据、增加仲裁优先级与固定协议约束 |
-| `docs/AGENT_LESSONS.md` | 修改 | 记录外部接入方案审计时的证据优先级与配置设计经验 |
+| `scripts/copilot_session_close_reminder.ps1` | 修改 | 将 Stop warning 文案和动作提示改为 ASCII，优先保证宿主 UI 可读性 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 补充 Stop warning 已在真实 UI 显示且中文 stderr 会乱码的结论 |
+| `CHANGELOG.md` | 修改 | 补充 v0.8.10 的真实 UI 观测与 ASCII 收敛说明 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 Stop hook UI 可显示但中文 stderr 可能乱码的经验 |
 
 **Copilot 接棒须知**：
-- 当前 CRM 仍未落地任何代码或表结构，实施计划仍属于“待实施”文档，不应被当成已实现现状。
-- 后续若进入实现阶段，`xid` 是否解密、`.env.example` 扩展方式和 AES 协议固定性均应按本轮再审计后的 v2.2 执行。
+- 当前 Stop hook 已有真实 Copilot UI 证据，后续不必再验证‘会不会显示’，重点转到‘是否稳定显示’和‘文案是否可读’。
+- 只要继续沿用 PowerShell 非零 stderr 路径，用户侧提示建议优先保持 ASCII；中文说明放日志、会议纪要和经验台账。
+- 本轮仅做了最小可读性修正，未改变 Stop 提醒的触发窗口、去重策略和证据来源。
 
 **未完成项**：
-- [ ] 如进入实施阶段，先按 v2.2 计划扩展 `.env.example` 与 `config.py`，不要新增第二份环境模板，也不要把固定加密协议做成运行时开关。
-
-
-
-
----
-
-### [2026-03-19 17:31] · GitHub Copilot · 补充数云CRM计划交叉审计结论
-
-**摘要**：将敏感数据加密规则与数云沟通确认单的仲裁结论落入实施计划，并补充加密兼容、同步频率与京东pin→xid约束
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 补充交叉审计结论与仲裁材料约束 |
-| `docs/AGENT_LESSONS.md` | 修改 | 记录数云CRM字段语义与加密兼容经验 |
-
-**Copilot 接棒须知**：
-- 本轮仅更新文档与经验台帐，未变更CRM代码实现。
-- 实施计划已明确每小时同步、MySQL 8.0+、包裹格式未决与京东业务表plat_account=pinid。
-
-**未完成项**：
-- [ ] 如继续实施，先按文档中的 v2.1 约束落地 crypto/account_match/member ETL。
-
-
-
-
----
-
-### [2026-03-19 17:23] · GitHub Copilot · 校正数云CRM实施计划
-
-**摘要**：将数云CRM实施计划改写为与当前代码库一致的校正版，修正主键、目录、水位与调度边界
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `docs/misc/数云CRM数据接入实施计划.md` | 修改 | 按当前仓库结构重写实施计划并补充校正依据与版本记录 |
-
-**Copilot 接棒须知**：
-- 本轮仅修改实施计划文档，未创建任何CRM代码或DDL文件。
-- 计划已明确 dwd_member 主键改为稳定原值键，后续落地应避免使用 account_match_key 作为主键。
-
-**未完成项**：
-- [ ] 如进入实施阶段，先按计划落地 config.py、create_dwd_crm_tables.sql、utils/crypto.py、utils/account_match.py、etl_dwd_member.py、run_crm_etl.py。
+- [ ] 在真实 Copilot 会话中继续观察 Stop warning 的稳定性，而不只是单次可见
+- [ ] 根据后续复测结果决定是否也把 PostToolUse warning 文案收敛为 ASCII
+- [ ] 继续决定下一步优先做第二阶段 agent picker 验收，还是继续扩第三阶段提醒型 hooks
 
 
 
@@ -233,41 +158,29 @@
 
 ---
 
-### [2026-03-18 15:19] · GitHub Copilot · 修复 run_etl 静态报错
+### [2026-03-23 10:54] · GitHub Copilot · 新增 Stop 收口提醒试点
 
-**摘要**：将 stdout/stderr 的 UTF-8 重配置改为类型检查友好的封装写法
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `run_etl.py` | 修改 | 封装 reconfigure 调用，消除 TextIO 属性报错 |
-
-**Copilot 接棒须知**：
-- 本次仅修复 `run_etl.py` 中 `sys.stdout` / `sys.stderr` 的静态检查报错，未改动 ETL 业务逻辑。
-- `run_etl.py` 在本轮之前已存在其他未提交改动，本次交接记录不覆盖那些历史变更。
-
-**未完成项**：
-- [x] 已完成
-
-### [2026-03-18 15:05] · GitHub Copilot · 执行 doc-sync 对齐文档
-
-**摘要**：修正 RUNBOOK 示例输出名并为文档审计脚本补降噪词，清理本轮高风险与伪中风险项
+**摘要**：新增基于 PostToolUse 日志信号的最小 Stop hook，并完成去重验证。
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/RUNBOOK.md` | 修改 | 将查数与导出示例输出名改为通用占位 |
-| `scripts/check_doc_sync.py` | 修改 | 为本轮确认的伪中风险项增加降噪词 |
-| `reports/docs_code_alignment.json` | 修改 | 复跑文档审计输出最新结果 |
+| `.github/hooks/post-edit-reminder-hefang.json` | 修改 | 扩展 Stop 事件并接入 session close 脚本 |
+| `scripts/copilot_session_close_reminder.ps1` | 新增 | 基于最近 PostToolUse 命中日志输出非阻断收口提醒并做短时去重 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录第二个提醒型 hook 试点与当前边界 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.10 Stop 收口提醒试点记录 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 Stop hook 应优先复用运行时日志信号的经验 |
 
 **Copilot 接棒须知**：
-- 本轮 doc-sync 主要处理 RUNBOOK 中写死的示例输出名，以及 check_doc_sync.py 对 query_data/export_ads/索引名的词法误报。
-- 该轮记录写入时实际仍残留 1 个 docs-only 高风险词 `ads_inventory_health_export`；后续已继续修正 RUNBOOK 示例输出名并需再次复扫确认。
+- 当前第三阶段已同时具备 PostToolUse 和 Stop 两个提醒型 hook 试点，但仍以非阻断 warning 为主，不进入 ask/deny。
+- Stop 提醒当前依赖 logs/copilot_post_edit_reminder.log 作为最近编辑证据，避免被历史未提交改动误报带偏；若后续窗口或去重策略不合适，应直接调 scripts/copilot_session_close_reminder.ps1。
+- 本轮已手工验证：首次运行 Stop 脚本返回 warning，短时间重复运行同签名返回 continue。
 
 **未完成项**：
-- [ ] 如需进一步降低 low risk 噪音，可继续扩充 scripts/check_doc_sync.py 的 STOPWORDS，但不影响当前交付
+- [ ] 在真实 Copilot 会话里观察 Stop warning 是否稳定展示
+- [ ] 根据真实使用情况收敛最近窗口和去重时间
+- [ ] 继续决定下一步优先做第二阶段 agent picker 验收，还是继续扩第三阶段提醒型 hooks
 
 
 
@@ -276,24 +189,117 @@
 
 ---
 
-### [2026-03-18 14:55] · GitHub Copilot · 验证 MCP 启动前提并修正示例配置
+### [2026-03-23 10:45] · GitHub Copilot · 继续细分 PostToolUse docs 规则
 
-**摘要**：确认 .mcp.json、npx、uvx 与关键环境变量均可用，但当前聊天会话仍未暴露 MCP 工具；同步修正 RUNBOOK 中的 MCP 示例为 mcpServers 格式
+**摘要**：将文档类提醒继续拆到数据字典类和协作文治理类，并验证六类文档样例均命中预期规则。
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/RUNBOOK.md` | 修改 | 将 MCP 配置示例对齐为当前实际使用的 mcpServers / MYSQL_PASS / ORACLE_CONNECTION_STRING 格式 |
-| `docs/AGENT_LESSONS.md` | 修改 | 追加 MCP 会话可见性经验 |
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 新增 data-dictionary 与 governance-docs 两类规则并收窄 runbook-docs 范围 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 docs 规则按后续动作差异继续细分 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.9 记录 docs 二次细分 |
 
 **Copilot 接棒须知**：
-- 当前已验证 `.mcp.json` 配置文件存在，且 `npx -y @benborla29/mcp-server-mysql`、`uvx mcp-server-oracle` 手动启动无立即错误。
-- 当前会话仍未出现 `mcp__mysql__...` / `mcp__oracle__...` 工具，说明“server 可启动”与“当前聊天工具面已挂载”是两个不同层次。
+- 当前 docs 细分的意义是让 warning 直接对应后续动作：数据字典关注字段/契约/映射，治理文档关注 handoff/lesson/todo 一致性，运行文档关注命令与说明同步。
+- 本轮最小验证已在日志中确认 MYSQL数据字典、AGENT_HANDOFF、RUNBOOK、README、会议纪要和普通 docs 分别命中 data-dictionary、governance-docs、runbook-docs、readme、meeting-minutes、doc。
 
 **未完成项**：
-- [ ] 使用全新聊天会话再次验证 MCP 工具是否已暴露给代理。
-- [ ] 若新会话仍无 MCP 工具，进一步检查宿主是否读取了当前仓库的 `.mcp.json`。
+- [ ] 在真实 Copilot 会话中分别编辑数据字典类和协作文治理类文档，观察新的 warning 分类是否稳定显示
+- [ ] 若后续还要继续细分，只在某一类文件具有明确不同收口动作时再新增规则，避免为分类而分类
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 10:24] · GitHub Copilot · 细分 PostToolUse docs 提醒规则
+
+**摘要**：将文档类 PostToolUse 提醒拆为会议纪要类、运行文档类、README 类和兜底 docs 类，并完成最小命中验证。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 新增 meeting-minutes、runbook-docs、readme 三类 docs 规则并修正匹配正则 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 docs 细粒度规则扩展与当前阶段状态 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.8 记录 docs 细粒度规则扩展 |
+
+**Copilot 接棒须知**：
+- 当前 docs 类提醒已不再统一落到 doc；后续若继续细分，可优先考虑数据字典类与协作文档类，而不是继续增加过多低收益分支。
+- 本轮最小验证已在日志中确认四类输入分别命中 meeting-minutes、runbook-docs、readme 和 doc；若下一步做真实 UI 复测，优先改这四类文件观察 warning 展示。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中分别编辑会议纪要、RUNBOOK 和 README，观察不同 docs 子类 warning 是否稳定显示
+- [ ] 若后续继续扩规则，评估是否单独拆出数据字典类或交接治理类文档提醒
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 10:19] · GitHub Copilot · 调整 PostToolUse warning 返回策略
+
+**摘要**：将提醒型 hook 从 systemMessage 成功返回切换为非阻断 warning 退出码，并同步沉淀 UI 展示排障结论。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 命中提醒时改为 stderr 文案加退出码 1，未命中仍返回 continue JSON |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 systemMessage 与稳定 UI warning 的边界，并更新第三阶段当前状态 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.7 记录 warning 返回策略调整 |
+| `docs/AGENT_LESSONS.md` | 修改 | 补充 PostToolUse warning 展示排障经验 |
+
+**Copilot 接棒须知**：
+- 当前 hook 已不再把 systemMessage 作为 UI warning 的主要实现路径；若后续继续做提醒型 hooks，优先区分上下文注入与用户侧 warning 两类目标。
+- 本轮真实日志已出现 result=warning，说明宿主已接收到非阻断 warning 路径；下一步应让用户在真实聊天中复测卡片展示稳定性。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中再次编辑 docs 或 Copilot 自定义文件，观察 Warning from Post-ToolUse hook 是否比之前更稳定显示
+- [ ] 若 UI 仍不稳定，继续查 GitHub Copilot Chat Hooks 输出面板与版本差异，确认是否属于宿主预览行为限制
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 09:55] · GitHub Copilot · 扩展 PostToolUse 提醒粒度
+
+**摘要**：继续推进第三阶段，扩展 `PostToolUse` 提醒分类，新增 Copilot 自定义能力文件的收口提醒，并明确日志优先于 UI warning。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 扩展提醒规则，新增 Copilot 自定义能力文件场景，并细化 ETL / SQL / docs 提示文本 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 `PostToolUse` 第一轮扩展范围，并明确日志为执行真值 |
+| `CHANGELOG.md` | 修改 | 记录 v0.8.6 PostToolUse 提醒粒度扩展 |
+
+**Copilot 接棒须知**：
+- 当前第三阶段已经证明 `PostToolUse` hook 能在真实宿主里运行；后续扩展仍应优先选择“可日志验证”的提醒型逻辑，不把 UI warning 是否显示当成唯一验收标准。
+- 下一步若继续推进，优先考虑 `Stop` 收口提醒试点，而不是直接进入 `PreToolUse` 阻断型逻辑。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中验证 Copilot 自定义能力文件修改时是否会命中新的 `copilot-customization` 提醒
+- [ ] 继续决定第三阶段下一步是扩 `PostToolUse` 细粒度规则，还是新增 `Stop` 收口提醒
+- [ ] 视实际误报情况继续收敛正则匹配和提示文案
+
+
+
 
 
 

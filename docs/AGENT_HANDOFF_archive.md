@@ -6,6 +6,758 @@
 
 ---
 
+### [2026-03-20 17:33] · GitHub Copilot · 落最小提醒型 hook 试点与阶段收口 prompt
+
+**摘要**：第三阶段先启用一个非阻断的 `PostToolUse` 提醒型 hook，同时补齐阶段收口检查 prompt。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/hooks/post-edit-reminder-hefang.json` | 新增 | 新增最小提醒型 hook 配置，仅在 `PostToolUse` 输出非阻断提醒 |
+| `scripts/copilot_post_edit_reminder.ps1` | 新增 | 新增 hook 脚本，对 ETL、SQL、docs 和 README 编辑输出轻量提醒 |
+| `.github/prompts/stage-close-hefang.prompt.md` | 新增 | 新增阶段收口检查 prompt，与 completion-check-hefang skill 形成双入口 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新第三阶段状态、hook 试点边界与阶段收口 prompt 定位 |
+| `CHANGELOG.md` | 修改 | 记录最小提醒型 hook 试点与阶段收口检查 prompt 上线 |
+
+**Copilot 接棒须知**：
+- 第三个阶段已不是纯设计稿，当前已有首个提醒型 hook 试点，但仍不包含任何阻断逻辑；若后续效果不好，应优先收敛提醒范围，而不是立刻升级为 ask/deny。
+- 后续若需要做结束前结构化检查，优先尝试 `stage-close-hefang` 或 `completion-check-hefang`，根据场景选择 prompt 或 skill 入口。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中观察 `post-edit-reminder-hefang` 是否会稳定触发
+- [ ] 根据实际误报情况收敛提醒范围或正则匹配
+- [ ] 决定第三阶段下一个试点是继续扩 `PostToolUse`，还是补 `Stop` 收口提醒
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-20 17:33] · GitHub Copilot · 补第三阶段 hooks 设计稿与会议纪要 prompt
+
+**摘要**：先将第三阶段 hooks 方案落为设计稿，同时补一个高复用的会议纪要更新 prompt，不急于真正启用 hooks。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/prompts/meeting-minutes-hefang.prompt.md` | 新增 | 新增会议纪要更新 prompt，统一纪要更新范围、边界与输出结构 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 新增第三阶段 hooks 设计稿，并记录会议纪要更新 prompt 的定位与用途 |
+| `CHANGELOG.md` | 修改 | 记录第三阶段 hooks 设计稿与会议纪要 prompt 上线 |
+
+**Copilot 接棒须知**：
+- 第三阶段当前仍只有设计稿，尚未创建任何 `.github/hooks/*.json`；后续若启动 hooks，应优先从提醒型 hooks 开始，不要直接启用阻断型逻辑。
+- 后续凡涉及 superpowers / Copilot 能力设计讨论后的纪要落盘，优先尝试调用 `meeting-minutes-hefang`。
+
+**未完成项**：
+- [ ] 决定第三阶段第一批是否真正创建提醒型 hooks
+- [ ] 若继续推进 hooks，实现前先明确是选择 `PostToolUse` 提醒，还是 `Stop` 收口提醒作为首个试点
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-20 16:49] · GitHub Copilot · 新增运行时验收 prompt
+
+**摘要**：将“运行时验收协助模式”沉淀为可复用 prompt，便于后续对 skills、instructions、agents 和 prompts 做统一验收。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/prompts/runtime-acceptance-hefang.prompt.md` | 新增 | 新增运行时验收 prompt，统一验收范围、人工观察点与输出结构 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 runtime-acceptance-hefang prompt 的定位、边界与用途 |
+| `CHANGELOG.md` | 修改 | 记录运行时验收 prompt 上线 |
+
+**Copilot 接棒须知**：
+- 后续若再次验证第一阶段 skills / instructions 或第二阶段 agents，优先尝试调用 `runtime-acceptance-hefang`，避免重复口头描述验收步骤。
+- 当前第三阶段 hooks 仍未启动；本轮继续优先选择风险更低、复用性更高的 prompt 内化路径。
+
+**未完成项**：
+- [ ] 用 `runtime-acceptance-hefang` 实测一次第二阶段 agents 的 agent picker 可见性
+- [ ] 继续决定第三阶段是先落 hooks 设计，还是继续补 prompt / agent 入口
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-20 15:40] · GitHub Copilot · 启动第二阶段 custom agents 内化
+
+**摘要**：按用户判定收口第一阶段验收，并在 `.github/agents/` 下落首批 5 个角色化 custom agents 骨架。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/agents/planner-hefang.agent.md` | 新增 | 新增规划代理，负责目标澄清、证据缺口与实施顺序规划 |
+| `.github/agents/etl-auditor-hefang.agent.md` | 新增 | 新增 ETL 审计代理，负责只读审计字段映射、增量逻辑与幂等性 |
+| `.github/agents/doc-syncer-hefang.agent.md` | 新增 | 新增文档对齐代理，负责差异归类与文档修订执行 |
+| `.github/agents/db-inspector-hefang.agent.md` | 新增 | 新增结构探查代理，负责快照、表结构与数据库证据核对 |
+| `.github/agents/reviewer-hefang.agent.md` | 新增 | 新增评审代理，负责风险复查、完工检查与交付前 review |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 将第一阶段验收收口，并新增第二阶段角色分化原则、进展与下一滚动项 |
+| `CHANGELOG.md` | 修改 | 记录 Copilot 第二阶段启动 |
+
+**Copilot 接棒须知**：
+- 第一阶段当前按用户判定先视为通过，但自然语言自动触发稳定性尚未完整细测，后续若发现不稳定，应优先回到 `description` 和命名层面修正。
+- 第二阶段已开始落 `.github/agents/*.agent.md`，下一步优先验证 5 个 agent 在 VS Code Copilot agent picker 中的可见性与命名清晰度，而不是立即进入 hooks。
+
+**未完成项**：
+- [ ] 验证 5 个 `.github/agents/*.agent.md` 是否出现在 VS Code Copilot agent picker 中
+- [ ] 根据真实使用反馈收敛每个 agent 的 tools 集合
+- [ ] 决定第二阶段稳定后是否进入第三阶段 hooks / MCP 增强
+
+
+
+
+
+
+
+---
+
+### [2026-03-20 15:27] · GitHub Copilot · 修复 ETL
+
+**摘要**：将 dws_sales 增量语义收口为日期窗口滚动回刷，并补强幂等性校验
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `etl_dws_sales.py` | 修改 | 新增唯一键粒度重复校验并引入滚动回刷参数 |
+| `run_etl.py` | 修改 | 主调度将 dws_sales 默认窗口调整为近7天滚动回刷 |
+| `docs/DATA_CONTRACTS.md` | 修改 | 对齐 dws_sales 无独立断点水位与近7天窗口事实 |
+| `docs/数据仓库与ETL手册.md` | 修改 | 对齐 dws_sales 滚动回刷策略与示例代码 |
+| `docs/ETL业务逻辑说明.md` | 修改 | 补充 dws_sales 日期窗口幂等重刷说明 |
+| `CHANGELOG.md` | 修改 | 记录 v0.8.1 dws_sales 增量语义修正 |
+
+**Copilot 接棒须知**：
+- 当前 dws_sales_daily 仍不是 ODS 那种 MODIFIEDDATE/SETTIME 双水位链路，而是按业务日期窗口滚动回刷。
+- 主调度现已默认回刷近7天，可补偿晚到修改；若后续需要真水位增量，应先决定是否改为消费 ODS。
+
+**未完成项**：
+- [ ] 评估 dws_sales 是否应从直接查 Oracle 迁移为消费 ODS 后再汇总
+- [ ] 如需进一步收口，再对 dws_sales 相关文档跑一轮针对性审计
+
+
+
+
+
+
+---
+
+### [2026-03-20 13:26] · GitHub Copilot · 重命名 CRM 上下文主文档
+
+**摘要**：将 CRM 方案文档重命名为跨对话上下文入口文件，并补充当前进度与下一步执行入口。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 新增 | 作为跨对话上下文主文件，补充阶段快照、推进进度与下一步执行入口 |
+| `docs/misc/数云CRM数据接入实施计划.md` | 删除 | 由新主文件替代，避免双文件并存 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.12 文档重命名 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 将当前记录中的旧路径切换为新路径 |
+| `docs/AGENT_HANDOFF_archive.md` | 修改 | 将历史记录中的旧路径切换为新路径 |
+| `docs/AGENT_LESSONS.md` | 修改 | 将经验证据中的旧路径切换为新路径 |
+
+**Copilot 接棒须知**：
+- 后续切换到新对话窗口时，优先直接提供 docs/misc/数云CRM实施上下文与下一步执行入口.md 作为完整上下文。
+- 该文件已经额外包含当前阶段快照、当前推进进度和下一步执行入口，可直接衔接第一阶段 CRM 实现。
+
+**未完成项**：
+- [ ] 若进入实现阶段，按文件中的下一步执行入口从 Phase 0 开始落代码
+
+
+
+
+
+
+---
+
+### [2026-03-20 13:50] · GitHub Copilot · 完成第一阶段静态验收并定义运行时验收步骤
+
+**摘要**：对第一阶段的 1 个 instructions 和 4 个 skills 完成结构性静态验收，并将运行时人工验收步骤落盘到会议纪要
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 新增第一阶段静态验收结果、保留风险、运行时人工验收步骤与判定 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮第一阶段验收记录 |
+| `CHANGELOG.md` | 修改 | 记录第一阶段静态验收完成 |
+
+**Copilot 接棒须知**：
+- 当前第一阶段的仓库内结构性验收已通过，但“是否真正被 VS Code Copilot 运行时发现和自动触发”仍未在会话中完成实测。
+- 下一步优先做运行时人工验收，重点检查 References、Diagnostics 和 `/` 技能列表，而不是继续新增能力文件。
+
+**未完成项**：
+- [ ] 验证 `python-etl.instructions.md` 在 ETL 文件上是否会自动出现于 References
+- [ ] 验证 4 个 skill 是否出现在 Copilot `/` 技能列表中
+- [ ] 验证 4 个 skill 的自然语言自动触发效果是否稳定
+
+
+
+
+
+
+---
+
+### [2026-03-20 12:04] · GitHub Copilot · 收口 CRM 实表补证
+
+**摘要**：补齐 hfsy 的 *1 覆盖率、modified 质量和 copy 表重叠度三项关键证据，并把实施计划推进到 v2.7。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 纳入 *1 列全空、modified 合规和 copy 表 100% 重叠的补证结论并推进到 v2.7 |
+| `docs/HFSY数据字典.md` | 修改 | 更新使用说明，明确 *1 列当前不可依赖且 copy 表应排除出正式链路 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.11 HFSY 实表补证结果 |
+| `docs/AGENT_LESSONS.md` | 修改 | 新增 DDL 不能替代覆盖率验证的经验记录 |
+
+**Copilot 接棒须知**：
+- 当前最重要的结论是：t_member_bind_info 的 *1 列和 DecryptionTags 在现网快照里全空，第一阶段不能按现成明文字段设计。
+- t_order_copy 与 t_order_copy1 当前和 t_order 按 order_item_id 100% 重叠，可先排除出正式链路，但仍建议让数云方确认命名语义。
+- modified 质量已补证通过，但因字段类型仍为字符串，增量实现仍要保留排序与 lookback 保护。
+
+**未完成项**：
+- [ ] 确认数云侧后续是否会真正回填 t_member_bind_info 的 *1 明文字段
+- [ ] 确认 t_order_copy 与 t_order_copy1 的正式命名语义与保留策略
+
+
+
+
+
+---
+
+### [2026-03-20 13:30] · GitHub Copilot · 补齐第一阶段剩余两个 skill 骨架
+
+**摘要**：继续滚动推进第一阶段，新增 doc-sync-hefang 与 completion-check-hefang，两者与已完成的规划、ETL 审计、ETL instructions 共同组成第一阶段基础闭环
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/skills/doc-sync-hefang/SKILL.md` | 新增 | 新增文档对齐 skill，覆盖审计、风险分级、确认修复与复扫流程 |
+| `.github/skills/completion-check-hefang/SKILL.md` | 新增 | 新增收口检查 skill，覆盖验证缺口、文档同步、handoff 与 lesson 提醒 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 将第一阶段推进到“第一批骨架已齐”，并把下一步切换为第一阶段验收 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮第一阶段闭环补齐记录 |
+| `CHANGELOG.md` | 修改 | 记录 doc-sync-hefang 与 completion-check-hefang skill 骨架上线 |
+
+**Copilot 接棒须知**：
+- 第一阶段不再继续新增同类基础能力，下一步应优先验证这 5 个能力在 VS Code Copilot 中的可发现性和触发效果。
+- 若触发不稳定，优先检查 skill 的 `description` 是否包含足够触发关键词，再检查目录位置与前言格式。
+
+**未完成项**：
+- [ ] 验证 `python-etl.instructions.md` 是否会在目标文件上自动应用
+- [ ] 验证 `planning-hefang`、`etl-audit-hefang`、`doc-sync-hefang`、`completion-check-hefang` 是否能被 Copilot 发现与触发
+
+
+
+
+
+---
+
+### [2026-03-20 11:38] · GitHub Copilot · 同步 hfsy 连接上下文
+
+**摘要**：将 hfsy 的连接事实同步到源侧文档、实施计划与 RUNBOOK，并明确真实密码不落盘。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/HFSY数据字典.md` | 修改 | 补充 hfsy 的 host/port/db/user 元信息与密码不落盘说明 |
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 新增源端连接事实章节并推进到 v2.6 |
+| `docs/RUNBOOK.md` | 修改 | 新增 hfsy 临时环境变量约定与只读探查示例 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.10 同步 HFSY 连接上下文 |
+| `docs/AGENT_LESSONS.md` | 修改 | 新增真实密码不落盘的经验记录 |
+
+**Copilot 接棒须知**：
+- hfsy 的真实连接密码已在会话中提供，但仍不得写入 git 跟踪文件；后续若继续联调，应通过环境变量或本地安全介质注入。
+- 第一阶段 CRM 实施边界未变，仍只围绕 t_member_info、t_member_bind_info、t_pin_xid_rel 开工。
+
+**未完成项**：
+- [ ] 补充 t_member_bind_info 的 *1 列覆盖率统计
+- [ ] 确认 t_order_copy 与 t_order_copy1 是否仅为备份表
+- [ ] 抽样验证 modified 字符串时间列是否存在异常格式或空串
+
+
+
+
+
+---
+
+### [2026-03-20 13:10] · GitHub Copilot · 新增 etl-audit-hefang skill 骨架
+
+**摘要**：继续推进第一阶段实施，新增 ETL 只读审计 skill，为字段映射、增量逻辑和幂等性检查提供统一入口
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/skills/etl-audit-hefang/SKILL.md` | 新增 | 新增 ETL 审计类 skill，覆盖血缘、增量、幂等性、文档同步和证据缺口检查 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新第一阶段实施进展、当前效果与剩余滚动项 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮 ETL 审计 skill 落地记录 |
+| `CHANGELOG.md` | 修改 | 记录 etl-audit-hefang skill 骨架上线 |
+
+**Copilot 接棒须知**：
+- 当前已完成第一阶段前三项，进入 ETL 相关实现前，可以先尝试命中 `planning-hefang` 或 `etl-audit-hefang`。
+- 剩余高优先项仅剩 `doc-sync-hefang` 与 `completion-check-hefang`，不建议在这之前提前引入 hooks 或 custom agents。
+
+**未完成项**：
+- [ ] 起草 `doc-sync-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+- [ ] 起草 `completion-check-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+
+
+
+
+
+
+---
+
+### [2026-03-20 12:55] · GitHub Copilot · 新增 planning-hefang skill 骨架
+
+**摘要**：在第一阶段实施中继续滚动推进，新增“先规划、后实施”的 planning-hefang skill 骨架
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/skills/planning-hefang/SKILL.md` | 新增 | 新增规划类 skill，覆盖目标澄清、证据缺口识别、步骤拆解与风险输出 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新第一阶段实施进展、当前效果与下一滚动项 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮 planning skill 落地记录 |
+| `CHANGELOG.md` | 修改 | 记录 planning-hefang skill 骨架上线 |
+
+**Copilot 接棒须知**：
+- 当前已完成第一阶段前两项：ETL file instructions 与 planning skill。复杂任务在进入实施前，应优先尝试命中 `planning-hefang`。
+- 下一步继续按顺序落 `etl-audit-hefang`，其后再做 `doc-sync-hefang` 与 `completion-check-hefang`。
+
+**未完成项**：
+- [ ] 起草 `etl-audit-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+- [ ] 起草 `doc-sync-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+- [ ] 起草 `completion-check-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+
+
+
+
+
+
+---
+
+### [2026-03-20 12:40] · GitHub Copilot · 启动第一阶段并落地 ETL 专用 instructions
+
+**摘要**：确认会议纪要已具备完整框架后，启动 superpowers 内化第一阶段实施，先拆出 ETL 专用 file instructions
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/instructions/python-etl.instructions.md` | 新增 | 新增 ETL / 调度 / ETL 自动化测试专用规则，覆盖血缘核对、增量逻辑、幂等性、文档同步与最小验证 |
+| `.github/copilot-instructions.md` | 修改 | 明确全局常驻规则与 ETL 专用 instructions 的分层关系 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 将状态更新为“第一阶段实施中”，并记录首个落地点与下一滚动项 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮第一阶段启动记录 |
+| `CHANGELOG.md` | 修改 | 记录第一阶段启动与 ETL 专用 instructions 上线 |
+
+**Copilot 接棒须知**：
+- 第一阶段已从讨论转入实施，且已完成第 1 个落地点；后续不要再把 ETL 领域细节继续堆回 `copilot-instructions.md`。
+- 下一步按既定顺序起草 `planning-hefang` skill，再继续 `etl-audit-hefang`、`doc-sync-hefang` 与 `completion-check-hefang`。
+
+**未完成项**：
+- [ ] 起草 `planning-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+- [ ] 起草 `etl-audit-hefang` skill 的 YAML frontmatter 与执行步骤骨架
+- [ ] 起草 `doc-sync-hefang` 与 `completion-check-hefang` 的骨架
+
+
+
+
+
+
+---
+
+### [2026-03-20 12:15] · GitHub Copilot · 定稿 Copilot 目录分层与规则拆分边界
+
+**摘要**：在 superpowers 内化会议纪要中定稿第一阶段 `.github` 目标目录结构，并明确总指令与 Python ETL 专用 instructions 的迁移边界
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 新增 `.github` 目标目录树、规则保留/迁移边界与实施门槛 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮目录结构定稿交接记录 |
+
+**Copilot 接棒须知**：
+- 当前会议纪要已完成两层设计：第一阶段 5 个能力规格，以及 `.github` 目录分层与规则拆分边界。
+- 后续若进入实施，应直接从 `python-etl.instructions.md` 的内容草案开始，而不是继续扩写 `copilot-instructions.md`。
+
+**未完成项**：
+- [ ] 起草 `python-etl.instructions.md` 的首版内容清单
+- [ ] 起草 4 个第一阶段 skill 的 YAML frontmatter 与执行步骤骨架
+
+
+
+
+
+
+---
+
+### [2026-03-20 12:05] · GitHub Copilot · 固化数云CRM审计发现清单
+
+**摘要**：将当前 hfsy 审计结论按风险等级固化进实施计划，明确第一阶段可开工范围、禁止误入范围和待补证项。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 新增当前审计发现清单并将版本推进到 v2.5 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.9 数云 CRM 审计发现清单 |
+
+**Copilot 接棒须知**：
+- 当前已明确第一阶段只应围绕 `hfsy.t_member_info`、`t_member_bind_info`、`t_pin_xid_rel` 开工；`t_trade`、`t_order` 延后到第二阶段，`t_order_copy*` 在补证前禁止纳入正式链路。
+- 仍待补证的核心项没有变化：`*1` 列覆盖率、copy 表角色、`modified` 字符串时间列的异常值分布。
+
+**未完成项**：
+- [ ] 补充 `t_member_bind_info` 的 `*1` 列覆盖率统计
+- [ ] 确认 `t_order_copy` 与 `t_order_copy1` 是否仅为备份表
+- [ ] 抽样验证 `modified` 字符串时间列是否存在异常格式或空串
+
+
+
+
+
+---
+
+### [2026-03-20 11:15] · GitHub Copilot · 细化 superpowers 第一阶段能力规格
+
+**摘要**：将 superpowers 内化会议纪要中的第一阶段五个能力细化为可实施规格，明确原语选择、触发语、输入输出与落地顺序
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 新增第一阶段五个能力的详细规格、统一模板与推荐落地顺序 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮规格化讨论交接记录 |
+
+**Copilot 接棒须知**：
+- 第一阶段已不再停留在能力名录，后续若开始实施，应按会议纪要中的推荐顺序先落 `.github/instructions/python-etl.instructions.md`，再落规划、审计、文档对齐和收口 skill。
+- 当前仍未创建任何 `.github/skills/`、`.github/instructions/` 实体文件，会议纪要中的名称均为暂定设计名，落地前可再微调，但不建议改动原语分配。
+
+**未完成项**：
+- [ ] 设计 `.github` 下未来 Copilot 自定义能力的目录分层
+- [ ] 判断哪些内容继续留在 `.github/copilot-instructions.md`，哪些内容迁移到 file instructions
+
+
+
+
+---
+
+### [2026-03-20 10:35] · GitHub Copilot · 新增 superpowers 内化会议纪要
+
+**摘要**：将 GitHub Copilot 能力内化讨论沉淀为持续更新的会议纪要文档，确认采用三阶段推进方案
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/superpowers内化会议纪要.md` | 新增 | 记录 superpowers 内化目标、三阶段方案、能力映射与后续更新规则 |
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮会议纪要建档交接记录 |
+
+**Copilot 接棒须知**：
+- 后续凡涉及 Copilot 自定义能力、superpowers 方法论迁移、skills / agents / hooks 分层设计的讨论，优先更新 `docs/misc/superpowers内化会议纪要.md`。
+- 当前仍处于方案讨论阶段，尚未创建 `.github/instructions/`、`.github/prompts/`、`.github/agents/` 或 `.github/skills/` 的新能力文件。
+
+**未完成项**：
+- [ ] 细化第一阶段 5 个能力的详细规格（名称、触发语、输入、输出、边界、是否调用脚本）
+- [ ] 设计 `.github` 下未来 Copilot 自定义能力的目录分层
+
+
+
+
+---
+
+### [2026-03-20 10:51] · GitHub Copilot · 补充 hfsy 数据字典与实表审计产物
+
+**摘要**：新增 HFSY 数据字典与 hfsy 结构快照，并把它们纳入数云 CRM 实施计划的主证据链。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `reports/snapshot_mysql_hfsy_schema.json` | 新增 | hfsy 实库结构快照，记录表、字段、键和行数 |
+| `docs/HFSY数据字典.md` | 新增 | 基于 hfsy 实库快照生成源侧表字段数据字典 |
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 补充 hfsy 快照与 HFSY 数据字典为第 2 轮实表校正证据 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.8 新增 HFSY 数据字典 |
+| `.github/copilot-instructions.md` | 修改 | 将 docs/HFSY数据字典.md 纳入文档同步检查清单 |
+
+**Copilot 接棒须知**：
+- 后续 CRM 设计应优先引用 reports/snapshot_mysql_hfsy_schema.json 与 docs/HFSY数据字典.md；当前仍需补充 t_member_bind_info 的 *1 列覆盖率统计，以及确认 t_order_copy / t_order_copy1 是否仅为备份表。
+
+**未完成项**：
+- [ ] 继续做 hfsy 行级抽样与字段覆盖率探查
+- [ ] 确认 t_order_copy 与 t_order_copy1 的正式链路角色
+- [ ] 若继续实现 CRM ETL，按 hfsy.t_member_info / t_member_bind_info / t_pin_xid_rel 作为第一阶段输入
+
+
+
+---
+
+### [2026-03-20 09:50] · GitHub Copilot · 校正数云CRM实表依据
+
+**摘要**：纳入 hfsy 实表与 xlsx 证据，修正 CRM 实施计划对标准方案和 MySQL 8.0 的过度假设
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 纳入 hfsy 实表与 xlsx 证据，切换到第 2 轮实表校正 |
+| `CHANGELOG.md` | 修改 | 记录 v0.7.7 数云 CRM 实表证据校正 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录标准方案不能替代真实实表的经验 |
+
+**Copilot 接棒须知**：
+- 后续 CRM 开发起点应从 `hfsy.t_member_info`、`hfsy.t_member_bind_info`、`t_pin_xid_rel` 出发，不再以 `fdi_*` JSON 表作为当前唯一事实源。
+- 下一步优先做样例行级探查与 modified 字段质量检查，确认 *1 解密列覆盖率和 order_copy 表是否为备份。
+
+**未完成项**：
+- [ ] 对 hfsy 核心表抽样 5~10 行，验证 modified 时间串格式、platCode 分布和 *1 字段覆盖率
+- [ ] 确认 t_order_copy 与 t_order_copy1 是否只是备份表，正式链路是否只消费 t_order
+
+
+
+
+---
+
+### [2026-03-19 18:11] · GitHub Copilot · 补充环境现实约束并生成数云方索取模板
+
+**摘要**：将单人负责数据库的环境边界写入项目硬约束，并为数云方准备可直接发送的资料索取模板
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/copilot-instructions.md` | 修改 | 增加单人负责数据库与外部取证优先级硬约束 |
+| `AGENTS.md` | 修改 | 增加环境现实约束与CRM取证路径 |
+| `.claude/CLAUDE.md` | 修改 | 为Claude侧补充单人数据库环境硬约束 |
+| `docs/ARCHITECTURE.md` | 修改 | 补充Oracle/VM部署边界与CRM实证来源限制 |
+| `CHANGELOG.md` | 修改 | 记录v0.7.6环境约束更新 |
+
+**Copilot 接棒须知**：
+- 后续涉及CRM实证时，不再默认存在内部DBA或同事；优先向用户索取本地可导出材料，若环境无对象再转向数云方。
+
+**未完成项**：
+- [ ] 如进入CRM第2轮审计，先向数云方索取真实建表SQL、关键表样本与xid/商品类目表确认。
+
+
+
+
+---
+
+### [2026-03-19 18:35] · GitHub Copilot · 完成CRM第1轮字段级仲裁
+
+**摘要**：完成 12 张数云 ODS 表的字段级仲裁矩阵，区分已可设计、待实表验证与标准方案文档自身缺口三类对象
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 新增第 1 轮 12 表字段级仲裁矩阵、发现清单与待确认项 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录外部接入表不应一律视为可直接设计的经验 |
+
+**Copilot 接棒须知**：
+- 第一阶段真正可直接进入实现设计的核心对象仍是 `fdi_member_info` 与 `fdi_jos_pin_xid`，订单链路属于第二阶段扩展。
+- 若继续第 2 轮，应优先索取真实 `shuyun_ods` 建表 SQL、`SHOW CREATE TABLE` 或脱敏样本，验证 `fdi_refund`、`fdi_rate`、`fdi_member_point_his`、`fdi_member_grade_his` 和商品类目表。
+
+**未完成项**：
+- [ ] 进入第 2 轮时，用真实 `shuyun_ods` 实表或样本验证 5 类残留问题：`member_id` 映射、`refund` 账号字段、`xid` 真实形态、包裹密文覆盖范围、商品类目表真实表名。
+
+
+
+
+
+---
+
+### [2026-03-19 18:18] · GitHub Copilot · 修正CRM计划版本漂移
+
+**摘要**：在继续细审前修正实施计划文首版本号与版本记录不一致的问题
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 将文首当前版本从 v2.1 修正为 v2.2，与版本记录一致 |
+
+**Copilot 接棒须知**：
+- 当前实施计划正文与版本表已按 v2.2 审计结果对齐。
+- 后续如继续细审，应重点处理“真实 ODS 实表/样本是否与仲裁文档一致”这一层，而不是再做文案级修词。
+
+**未完成项**：
+- [ ] 若需宣称与仲裁文档 100% 对齐，下一步必须引入真实 `shuyun_ods` 实表或样本数据做字段级核验。
+
+
+
+
+
+---
+
+### [2026-03-19 18:10] · GitHub Copilot · 再审计数云CRM实施计划
+
+**摘要**：依据三个仲裁文档、当前代码库与数据库快照，再次修正数云CRM实施计划中的过期事实、无效证据链与配置过度设计问题
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 修正 `.env.example` 现状、移除不存在的 R10 证据、增加仲裁优先级与固定协议约束 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录外部接入方案审计时的证据优先级与配置设计经验 |
+
+**Copilot 接棒须知**：
+- 当前 CRM 仍未落地任何代码或表结构，实施计划仍属于“待实施”文档，不应被当成已实现现状。
+- 后续若进入实现阶段，`xid` 是否解密、`.env.example` 扩展方式和 AES 协议固定性均应按本轮再审计后的 v2.2 执行。
+
+**未完成项**：
+- [ ] 如进入实施阶段，先按 v2.2 计划扩展 `.env.example` 与 `config.py`，不要新增第二份环境模板，也不要把固定加密协议做成运行时开关。
+
+
+
+
+
+---
+
+### [2026-03-19 17:31] · GitHub Copilot · 补充数云CRM计划交叉审计结论
+
+**摘要**：将敏感数据加密规则与数云沟通确认单的仲裁结论落入实施计划，并补充加密兼容、同步频率与京东pin→xid约束
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 补充交叉审计结论与仲裁材料约束 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录数云CRM字段语义与加密兼容经验 |
+
+**Copilot 接棒须知**：
+- 本轮仅更新文档与经验台帐，未变更CRM代码实现。
+- 实施计划已明确每小时同步、MySQL 8.0+、包裹格式未决与京东业务表plat_account=pinid。
+
+**未完成项**：
+- [ ] 如继续实施，先按文档中的 v2.1 约束落地 crypto/account_match/member ETL。
+
+
+
+
+
+---
+
+### [2026-03-19 17:23] · GitHub Copilot · 校正数云CRM实施计划
+
+**摘要**：将数云CRM实施计划改写为与当前代码库一致的校正版，修正主键、目录、水位与调度边界
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/数云CRM实施上下文与下一步执行入口.md` | 修改 | 按当前仓库结构重写实施计划并补充校正依据与版本记录 |
+
+**Copilot 接棒须知**：
+- 本轮仅修改实施计划文档，未创建任何CRM代码或DDL文件。
+- 计划已明确 dwd_member 主键改为稳定原值键，后续落地应避免使用 account_match_key 作为主键。
+
+**未完成项**：
+- [ ] 如进入实施阶段，先按计划落地 config.py、create_dwd_crm_tables.sql、utils/crypto.py、utils/account_match.py、etl_dwd_member.py、run_crm_etl.py。
+
+
+
+
+
+
+---
+
+### [2026-03-18 15:19] · GitHub Copilot · 修复 run_etl 静态报错
+
+**摘要**：将 stdout/stderr 的 UTF-8 重配置改为类型检查友好的封装写法
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `run_etl.py` | 修改 | 封装 reconfigure 调用，消除 TextIO 属性报错 |
+
+**Copilot 接棒须知**：
+- 本次仅修复 `run_etl.py` 中 `sys.stdout` / `sys.stderr` 的静态检查报错，未改动 ETL 业务逻辑。
+- `run_etl.py` 在本轮之前已存在其他未提交改动，本次交接记录不覆盖那些历史变更。
+
+**未完成项**：
+- [x] 已完成
+
+### [2026-03-18 15:05] · GitHub Copilot · 执行 doc-sync 对齐文档
+
+**摘要**：修正 RUNBOOK 示例输出名并为文档审计脚本补降噪词，清理本轮高风险与伪中风险项
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/RUNBOOK.md` | 修改 | 将查数与导出示例输出名改为通用占位 |
+| `scripts/check_doc_sync.py` | 修改 | 为本轮确认的伪中风险项增加降噪词 |
+| `reports/docs_code_alignment.json` | 修改 | 复跑文档审计输出最新结果 |
+
+**Copilot 接棒须知**：
+- 本轮 doc-sync 主要处理 RUNBOOK 中写死的示例输出名，以及 check_doc_sync.py 对 query_data/export_ads/索引名的词法误报。
+- 该轮记录写入时实际仍残留 1 个 docs-only 高风险词 `ads_inventory_health_export`；后续已继续修正 RUNBOOK 示例输出名并需再次复扫确认。
+
+**未完成项**：
+- [ ] 如需进一步降低 low risk 噪音，可继续扩充 scripts/check_doc_sync.py 的 STOPWORDS，但不影响当前交付
+
+
+
+
+
+
+
+---
+
+### [2026-03-18 14:55] · GitHub Copilot · 验证 MCP 启动前提并修正示例配置
+
+**摘要**：确认 .mcp.json、npx、uvx 与关键环境变量均可用，但当前聊天会话仍未暴露 MCP 工具；同步修正 RUNBOOK 中的 MCP 示例为 mcpServers 格式
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/RUNBOOK.md` | 修改 | 将 MCP 配置示例对齐为当前实际使用的 mcpServers / MYSQL_PASS / ORACLE_CONNECTION_STRING 格式 |
+| `docs/AGENT_LESSONS.md` | 修改 | 追加 MCP 会话可见性经验 |
+
+**Copilot 接棒须知**：
+- 当前已验证 `.mcp.json` 配置文件存在，且 `npx -y @benborla29/mcp-server-mysql`、`uvx mcp-server-oracle` 手动启动无立即错误。
+- 当前会话仍未出现 `mcp__mysql__...` / `mcp__oracle__...` 工具，说明“server 可启动”与“当前聊天工具面已挂载”是两个不同层次。
+
+**未完成项**：
+- [ ] 使用全新聊天会话再次验证 MCP 工具是否已暴露给代理。
+- [ ] 若新会话仍无 MCP 工具，进一步检查宿主是否读取了当前仓库的 `.mcp.json`。
+
+
+
+
+
+
+
+
+---
+
 ### [2026-03-18 14:48] · GitHub Copilot · 新增经验台帐与复盘机制
 
 **摘要**：解释 MCP 可见性边界，新增 Agent 经验台帐、记录脚本、OpenCode lesson 命令与复盘提醒机制
