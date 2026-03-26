@@ -12,10 +12,12 @@
 策略：每日重新计算
 """
 
+import logging
+import time
+from datetime import datetime, timedelta
+
 import pandas as pd
 from sqlalchemy import create_engine, text
-from datetime import datetime, timedelta
-import logging
 
 from config import MAIN_CATEGORY_IDS, MYSQL_CONN_STR
 
@@ -25,6 +27,20 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+RETRYABLE_MYSQL_LOCK_KEYWORDS = (
+    '1213',
+    '1205',
+    'deadlock found',
+    'lock wait timeout exceeded',
+    '未能获取命名锁',
+)
+
+
+def _is_retryable_mysql_lock_error(exc):
+    message = str(exc).lower()
+    return any(keyword in message for keyword in RETRYABLE_MYSQL_LOCK_KEYWORDS)
 
 
 def ensure_table_columns(engine):
@@ -294,16 +310,38 @@ def calculate_inventory_health():
         --         这与Oracle SQL逻辑完全一致（FROM stock st LEFT JOIN sales sa）
     """
     
-    # 先清空当天数据
-    logger.info(f"清空当天数据（{today}）...")
-    with engine.begin() as conn:
-        conn.execute(text(f"DELETE FROM ads_inventory_health WHERE snapshot_date = {today}"))
-    
-    # 执行计算
-    logger.info("执行库存健康度计算...")
-    with engine.connect() as conn:
-        conn.execute(text(sql))
-        conn.commit()
+    lock_name = 'hefang_dw:ads_inventory_health'
+    max_attempts = 3
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with engine.connect() as lock_conn:
+                got_lock = lock_conn.execute(
+                    text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
+                    {"lock_name": lock_name, "timeout_seconds": 30},
+                ).scalar()
+                if got_lock != 1:
+                    raise TimeoutError(f"未能获取命名锁: {lock_name}")
+
+                try:
+                    logger.info(
+                        f"清空当天数据（{today}）并执行库存健康度计算（单事务，第 {attempt}/{max_attempts} 次）..."
+                    )
+                    with engine.begin() as conn:
+                        conn.execute(text(f"DELETE FROM ads_inventory_health WHERE snapshot_date = {today}"))
+                        conn.execute(text(sql))
+                finally:
+                    lock_conn.execute(text("SELECT RELEASE_LOCK(:lock_name)"), {"lock_name": lock_name})
+
+            break
+        except Exception as exc:
+            if attempt >= max_attempts or not _is_retryable_mysql_lock_error(exc):
+                raise
+            wait_seconds = attempt * 5
+            logger.warning(
+                f"检测到可重试锁冲突（第 {attempt}/{max_attempts} 次）：{exc}；{wait_seconds} 秒后重试..."
+            )
+            time.sleep(wait_seconds)
     
     # 查询写入记录数
     with engine.connect() as conn:

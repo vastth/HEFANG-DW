@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS ods_fa_storage (
     m_productalias_id BIGINT NULL,
     qty DECIMAL(18,4) NULL,
     qtyvalid DECIMAL(18,4) NULL,
+    qtypurchaserem DECIMAL(18,4) NULL,
     isactive CHAR(1) NULL,
     etl_batch_id VARCHAR(32) NOT NULL,
     etl_loaded_at DATETIME DEFAULT CURRENT_TIMESTAMP

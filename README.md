@@ -137,7 +137,9 @@ hefang_dw/
 │   ├── ETL业务逻辑说明.md     # 每个ETL脚本的人话版逻辑说明
 │   ├── 问题排查手册.md          # 常见问题与解决方案（待创建）
 │   ├── MYSQL数据字典.md # MySQL数据字典（主）
-│   └── misc/                    # 其他文档
+│   ├── misc/                    # 其他文档
+│   │   └── ODS打通自动化链路计划与续接入口.md # ODS 打通工作续接主文件
+│   └── ...
 │
 ├── SQL/                         # SQL脚本
 │   └── create_ods_tables.sql     # ODS建表SQL（可选）
@@ -301,14 +303,15 @@ python run_etl.py
 
 执行流程：
 ```
-[1/8] dim_product (商品维度) ✅
-[2/8] dim_sku (SKU维度) ✅
-[3/8] dim_store (店仓维度) ✅
-[4/8] dim_channel (渠道维度) ✅
-[5/8] dws_sales_daily (销售明细) ✅
-[6/8] dws_inventory_daily (库存明细) ✅
-[7/8] dabo_ready (达播数据就绪检查/回填) ✅
-[8/8] ads_inventory_health (库存健康度) ✅
+[1/9] dim_product (商品维度) ✅
+[2/9] dim_sku (SKU维度) ✅
+[3/9] dim_store (店仓维度) ✅
+[4/9] dim_channel (渠道维度) ✅
+[5/9] ods_sync (ODS同步与质检) ✅
+[6/9] dws_sales_daily (销售明细，已消费ODS) ✅
+[7/9] dws_inventory_daily (库存明细，已消费ODS) ✅
+[8/9] dabo_ready (达播数据就绪检查/回填) ✅
+[9/9] ads_inventory_health (库存健康度) ✅
 ```
 
 ### 4.1 ODS同步（默认增量，可切全量）
@@ -330,6 +333,7 @@ python run_ods.py --backfill-days 14 --window-days 1
 - 质检回看天数：`--qc-days 7`
 
 说明：`run_ods.py` 会在抽取完成后自动执行 ODS 质量校验，并将结果写入 `logs/ods_qc_*.log`；质检默认使用抽取完成时刻作为 `--as-of` 截止时间，避免时间漂移。
+同时，自 2026-03-23 起，`run_etl.py` 主链也会自动调用 ODS 同步；`run_ods.py` 仍保留为可独立手动执行的入口。
 
 ### 5. 验证数据
 

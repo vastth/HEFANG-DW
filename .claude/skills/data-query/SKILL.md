@@ -17,7 +17,7 @@ argument-hint: "[查询需求，如 最近7天销售排行 | 留空=先澄清需
 
 1. 结构字段 / 索引 / 表结构问题
    - 优先委托 `db-inspector`
-   - 若 MCP 不可用，提示先补齐 `.mcp.json` 或改用结构快照脚本只读查看
+   - 若 MCP 不可用，先检查工作区 `.vscode/mcp.json` 与用户级 `mcp.json`；仓库根 `.mcp.json` 仅作兼容/本地参考，必要时改用结构快照脚本只读查看
 
 2. ODS 固定对账
    - `tools/check_ods_incremental.py`

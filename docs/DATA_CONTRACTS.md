@@ -45,21 +45,24 @@ ODS（Operational Data Store）是 Oracle ERP 到 MySQL 数仓的原始镜像层
 | **更新策略** | 全量覆盖（每日或按需触发）|
 | **主键** | `(m_productalias_id, c_store_id)` |
 | **水位字段** | 无（全量覆盖，不使用增量水位）|
-| **ETL时间戳** | `etl_updated_at`（每次写入时更新）|
+| **ETL时间戳** | `etl_loaded_at`（每次写入时更新）|
 
 **关键字段**：
 
 | 字段名 | 类型 | 含义 | DQ 点 |
 |--------|------|------|-------|
+| `id` | BIGINT | 库存记录 ID | PK 组成 |
 | `m_productalias_id` | BIGINT | SKU ID（条码维度）| NOT NULL |
 | `m_product_id` | BIGINT | 商品 ID（SPU 维度）| NOT NULL |
 | `c_store_id` | BIGINT | 店仓 ID | NOT NULL |
+| `qty` | DECIMAL | 当前库存数量 | ≥ 0 |
+| `qtyvalid` | DECIMAL | Oracle 原始可用库存字段 | 可为空 |
+| `qtypurchaserem` | DECIMAL | 采购欠数/在途 | ≥ 0 |
 | `isactive` | VARCHAR(1) | 是否有效（'Y'/'N'）| 仅 'Y' 参与计算 |
-| `qty_on_hand` | DECIMAL | 当前库存数量 | ≥ 0 |
-| `etl_updated_at` | DATETIME | ETL 写入时间 | NOT NULL |
+| `etl_loaded_at` | DATETIME | ETL 写入时间 | NOT NULL |
 
 **DQ 规则**：
-- `isactive = 'Y'` 且 `qty_on_hand IS NOT NULL` 的记录才参与 ADS 计算
+- `isactive = 'Y'` 且 `qty IS NOT NULL` 的记录才参与下游计算
 - 总仓：`c_store_id` 对应 `C_STORE.CODE = '001'`
 - 云仓：`c_store_id` 对应 `C_STORE.IS_ALLO2OSTORAGE = 'Y'`
 
@@ -258,17 +261,17 @@ DIM（Dimension）层是每日全量刷新的维度表。直接从 Oracle 拉取
 | `channel_id` | INT | 渠道ID（Oracle `ID`） |
 | `channel_name` | VARCHAR | 渠道名称（Oracle `NAME`） |
 | `channel_code` | VARCHAR | 渠道档案编码（Oracle `CODE`） |
-| `WING_CODE` | VARCHAR | 对应店仓编码（Oracle `WING_CODE`） |
+| `WING_CODE` | VARCHAR | 渠道挂接码（Oracle `WING_CODE`） |
 | `is_main` | TINYINT | 是否主要渠道（文档定义主渠道ID集映射） |
 | `platform_type` | VARCHAR | 平台类型（按渠道名称派生） |
 | `is_active` | CHAR(1) | 是否有效（Oracle `ISACTIVE`） |
 | `created_at` | DATETIME | ETL 写入时间 |
 
-说明：`dim_channel` 的目标结构已在 MySQL 快照中存在，来源表也能在 Oracle 快照中定位；但最新交接记录注明“未执行真实 ETL 写库”，因此本契约目前表示“目标设计与仓库实现”，不等同于“目标库现存数据已完成替换”。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json#L720-L790)；[reports/snapshot_oracle_bosnds3_schema.json](reports/snapshot_oracle_bosnds3_schema.json#L9870-L9925)；[etl_dim_channel.py](etl_dim_channel.py#L1-L131)；[SQL/create_dim_channel.sql](SQL/create_dim_channel.sql#L1-L11)；[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md#L55-L61)
+说明：`dim_channel` 的目标结构已在 MySQL 快照中存在，且已于 2026-03-23 实查 Oracle `O2O_RETAIL_CHANNEL` 与 MySQL `dim_channel`，确认两边均为 87 条记录、`WING_CODE` 全部非空，说明目标库现存数据已完成真实回填。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json#L720-L790)；[reports/snapshot_oracle_bosnds3_schema.json](reports/snapshot_oracle_bosnds3_schema.json#L9870-L9925)；[etl_dim_channel.py](etl_dim_channel.py#L1-L131)
 
 **DQ/处理规则**：
 - `is_main = 1` 当 `channel_id` 在文档定义的主要渠道 ID 集 `{11, 19, 28, 57, 60, 85, 300}`。来源：[etl_dim_channel.py](etl_dim_channel.py#L22-L51)
-- `WING_CODE` 直接映射 Oracle `WING_CODE`；结合 `C_STORE.CODE` 规则，它才是 DS001 这类店仓编码的来源，`CODE` 仅保留为渠道档案编码。来源：[etl_dim_channel.py](etl_dim_channel.py#L27-L45)；[docs/业务逻辑与指标规范.md](docs/业务逻辑与指标规范.md#L211-L234)
+- `WING_CODE` 直接映射 Oracle `WING_CODE`；按 2026-03-23 实查结果，当前源表与目标表中的该字段均为非空，但现网值以 Oracle 原始短码为准，不应在测试中再硬编码假设 `DS001` 必然存在。来源：[etl_dim_channel.py](etl_dim_channel.py#L27-L45)
 - `platform_type` 按渠道名称归类为天猫/京东/抖音/小红书/视频号/唯品会/得物/其他。来源：[etl_dim_channel.py](etl_dim_channel.py#L33-L43)
 
 ---
@@ -283,7 +286,7 @@ DWS（Data Warehouse Summary）层是面向主题的汇总明细层。
 
 | 属性 | 值 |
 |------|-----|
-| **来源** | ODS: `ods_m_retail` + `ods_m_retailitem` |
+| **来源** | ODS: `ods_m_retail` + `ods_m_retailitem` + DIM: `dim_store` |
 | **生产脚本** | `etl_dws_sales.py` |
 | **粒度** | 1行 = 1个 SKU（`m_productalias_id`）在1天（`date_id`）的销售汇总 |
 | **更新策略** | 增量（按日期窗口 DELETE + INSERT）|
@@ -314,13 +317,13 @@ DWS（Data Warehouse Summary）层是面向主题的汇总明细层。
 | `created_at` | DATETIME | 创建时间 |  |
 | `updated_at` | DATETIME | 更新时间 |  |
 
-说明：字段以 MySQL 结构快照为准，ETL 输出包含 `sales_qty`/`sales_amount`/`sales_amount_list`/`return_qty`/`return_amount` 等，净销量/净销售额字段存在但未由 ETL 写入。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json)；[etl_dws_sales.py](etl_dws_sales.py#L36-L44)
+说明：字段以 MySQL 结构快照为准，ETL 输出包含 `sales_qty`/`sales_amount`/`sales_amount_list`/`return_qty`/`return_amount` 等，净销量/净销售额字段存在但未由 ETL 写入；`store_code` 与 `is_cloud_store` 当前由 `dim_store` 回补。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json)；[etl_dws_sales.py](etl_dws_sales.py)
 
 **DQ 规则**：
-- `sales_qty = SUM(qty) WHERE qty > 0`
-- `return_qty = ABS(SUM(qty)) WHERE qty < 0`
+- `sales_qty = SUM(ods_m_retailitem.qty) WHERE ods_m_retail.tot_amt_actual > 0`
+- `return_qty = SUM(ABS(ods_m_retailitem.qty)) WHERE ods_m_retail.tot_amt_actual < 0`
 - 同一 `(date_id, store_id, product_id, m_productalias_id)` 只有1行（聚合后唯一）。来源：[SQL/alter_dws_sales_unique_key.sql](SQL/alter_dws_sales_unique_key.sql#L1-L8)
-- 双水位：线上数据走 `MODIFIEDDATE` 水位，线下走 `SETTIME` 水位（详见 `etl_dws_sales.py`）
+- 业务日期窗口：按 `date_id` 做 DELETE + INSERT 回刷，不直接使用 ODS 的双水位作为 DWS 水位。
 
 ---
 
@@ -328,7 +331,7 @@ DWS（Data Warehouse Summary）层是面向主题的汇总明细层。
 
 | 属性 | 值 |
 |------|-----|
-| **来源** | ODS: `ods_fa_storage` + DIM |
+| **来源** | ODS: `ods_fa_storage` + DIM: `dim_store` |
 | **生产脚本** | `etl_dws_inventory.py` |
 | **粒度** | 1行 = 1个 SKU 在1天（`date_id`）的库存快照 |
 | **更新策略** | 每日快照（覆盖当日数据）|
@@ -353,7 +356,7 @@ DWS（Data Warehouse Summary）层是面向主题的汇总明细层。
 | `etl_time` | DATETIME | ETL 时间戳 | NOT NULL |
 | `created_at` | DATETIME | 创建时间 |  |
 
-说明：字段以 MySQL 结构快照为准，并与 ETL 输出字段保持一致。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json)；[etl_dws_inventory.py](etl_dws_inventory.py#L28-L39)
+说明：字段以 MySQL 结构快照为准，并与 ETL 输出字段保持一致；当前 `store_code` 与 `is_cloud_store` 由 `dim_store` 回补，`qty_valid` 继续沿用 `qty` 口径。来源：[reports/snapshot_mysql_hefangdw_schema.json](reports/snapshot_mysql_hefangdw_schema.json)；[etl_dws_inventory.py](etl_dws_inventory.py)
 
 **DQ 规则**：
 - 仅包含 `isactive = 'Y'` 且参与计算的店仓（总仓或云仓）
@@ -534,3 +537,4 @@ WHERE p.M_DIM4_ID IN (134, 142, 139, 138, 141, 143, 133, 136, 140, 137, 144, 145
 | v2.4 | 2026-03-02 | 补回结构字段并标注未填充说明 |
 | v2.5 | 2026-03-18 | 新增 dim_channel 数据契约与 Oracle 来源说明 |
 | v2.6 | 2026-03-18 | 将 dim_channel 店仓字段重命名为 WING_CODE 并对齐 Oracle 来源 |
+| v2.7 | 2026-03-23 | 修正 dim_channel 现网核对结论，确认目标库数据已与 Oracle 对齐 |

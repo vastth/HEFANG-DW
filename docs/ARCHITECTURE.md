@@ -56,7 +56,7 @@
 hefang_dw/
 │
 ├── 【调度入口】
-│   ├── run_etl.py              主调度：8步流水线（dim→dws→dabo→ads）
+│   ├── run_etl.py              主调度：9步流水线（dim→ods→dws→dabo→ads）
 │   ├── run_ods.py              ODS 专项调度（增量/全量 + 自动质检）
 │   ├── scheduled_etl.py        任务计划包装（调 run_etl.py → test_etl_automation.py）
 │   └── run_scheduled_etl.bat   Windows 任务计划触发脚本
@@ -113,7 +113,7 @@ hefang_dw/
 │   ├── .claude/agents/data-query-agent.md  数据查询与对账专家
 │   ├── .claude/skills/          Skills 定义（/handoff 等）
 │   ├── .claude/skills/data-query/SKILL.md  data-query 查询路由工作流
-│   └── .mcp.json                本地 MCP 配置（不提交）
+│   └── .mcp.json                本地 MCP 兼容配置（主要供 Claude/OpenCode 参考，不作为 VS Code 会话主入口）
 │
 └── 【数据与输出】
     ├── data/                   测试参考数据（不提交）
@@ -137,10 +137,11 @@ hefang_dw/
 2    etl_dim_sku            SKU 维度全刷                 重试3次→告警继续
 3    etl_dim_store          店仓维度全刷                 重试3次→告警继续
 4    etl_dim_channel        渠道维度全刷                 重试3次→告警继续
-5    etl_dws_sales          销售增量（T-1 默认）         重试3次→告警停止
-6    etl_dws_inventory      库存快照                     重试3次→告警停止
-7    dabo_ready             达播 CSV 就绪检查            检查通过→触发回填
-8    etl_ads_health         库存健康度全量重算           重试3次→告警继续
+5    ods_sync               ODS 增量同步 + 自动质检       重试3次→告警继续
+6    etl_dws_sales          销售增量（已消费ODS）        重试3次→告警停止
+7    etl_dws_inventory      库存快照（已消费ODS）        重试3次→告警停止
+8    dabo_ready             达播 CSV 就绪检查            检查通过→触发回填
+9    etl_ads_health         库存健康度全量重算           重试3次→告警继续
 ─────────────────────────────────────────────────────────────────
 ```
 
@@ -254,9 +255,17 @@ Windows 任务计划（每日 xx:xx）
                     └─▶ test_etl_automation.py（仅在 ETL 成功后执行）
 ```
 
-ODS 流水线独立调度（通常早于主流水线）：
+ODS 流水线当前已纳入主流水线，也保留独立手动执行入口：
 ```
-Windows 任务计划（每日更早）
+Windows 任务计划 / 手动触发
+    └─▶ run_etl.py
+            ├─▶ ods_sync（内部调用 run_ods.run）
+            │       ├─▶ etl_ods_fa_storage.run()
+            │       ├─▶ etl_ods_m_retail.run()
+            │       └─▶ etl_ods_m_retailitem.run()
+            └─▶ 后续 DWS / ADS 主链
+
+手动独立执行：
     └─▶ python run_ods.py
             ├─▶ etl_ods_fa_storage.run()
             ├─▶ etl_ods_m_retail.run()

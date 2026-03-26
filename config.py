@@ -83,6 +83,7 @@ TASK_DISPLAY_NAME = {
     'dim_sku': 'SKU 维度',
     'dim_store': '店仓维度',
     'dim_channel': '渠道维度',
+    'ods_sync': 'ODS 同步与质检',
     'dws_sales': '销售数据 (dws_sales)',
     'dws_inventory': '库存数据 (dws_inventory)',
     'dabo_ready': '达播数据就绪检查',
@@ -117,6 +118,29 @@ ORACLE_VERIFY_QUERIES = {
                     AND fs.M_PRODUCTALIAS_ID IS NOT NULL
                     AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
                     AND p.M_DIM4_ID IN ({_MAIN_CATEGORY_IDS_SQL})
+        """,
+
+        # 对齐 dws_sales_daily 近30天电商+云仓汇总口径
+        'dws_sales_30d_summary': """
+                SELECT
+                    COUNT(*) AS row_count,
+                    NVL(SUM(sales_amount), 0) AS sales_amount,
+                    NVL(SUM(return_amount), 0) AS return_amount
+                FROM (
+                    SELECT
+                        COUNT(DISTINCT CASE WHEN r.TOT_AMT_ACTUAL > 0 OR (r.TOT_AMT_ACTUAL = 0 AND ri.QTY > 0) THEN r.ID END) AS order_count,
+                        SUM(CASE WHEN r.TOT_AMT_ACTUAL > 0 OR (r.TOT_AMT_ACTUAL = 0 AND ri.QTY > 0) THEN ri.TOT_AMT_ACTUAL ELSE 0 END) AS sales_amount,
+                        SUM(CASE WHEN r.TOT_AMT_ACTUAL < 0 OR (r.TOT_AMT_ACTUAL = 0 AND ri.QTY < 0) THEN ABS(ri.TOT_AMT_ACTUAL) ELSE 0 END) AS return_amount
+                    FROM M_RETAILITEM ri
+                    INNER JOIN M_RETAIL r ON ri.M_RETAIL_ID = r.ID
+                    LEFT JOIN C_STORE s ON r.C_STORE_ID = s.ID
+                    WHERE r.ISACTIVE = 'Y'
+                      AND r.STATUS = 2
+                      AND r.BILLDATE >= TO_NUMBER(TO_CHAR(TRUNC(SYSDATE) - 30, 'YYYYMMDD'))
+                      AND ri.M_PRODUCTALIAS_ID IS NOT NULL
+                      AND (s.CODE LIKE 'DS%' OR s.IS_ALLO2OSTORAGE = 'Y')
+                    GROUP BY r.BILLDATE, r.C_STORE_ID, ri.M_PRODUCT_ID, ri.M_PRODUCTALIAS_ID
+                )
         """,
 
         # 对齐库存健康度（SKU粒度）基表口径：统计可参与计算的SKU条码数

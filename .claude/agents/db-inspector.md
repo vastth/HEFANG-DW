@@ -13,6 +13,7 @@ model: haiku
 SELECT 1
 ```
 若失败，告知用户检查 MYSQL_* 环境变量和 MCP 配置（.mcp.json）。
+若当前是在 VS Code / Copilot 会话中，优先检查工作区 `.vscode/mcp.json` 和用户级 `mcp.json`；仓库根 `.mcp.json` 不保证会直接暴露为当前会话工具。
 
 ## 探查流程
 

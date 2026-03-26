@@ -13,6 +13,9 @@ from config import MYSQL_CONFIG, ORACLE_CONFIG, ORACLE_DSN, ORACLE_VERIFY_QUERIE
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
+
+ORACLE_DIFF_THRESHOLD_PCT = 0.5
+
 def get_mysql_conn():
     """获取MySQL连接（从配置/环境变量读取）"""
     return pymysql.connect(
@@ -45,6 +48,44 @@ def get_oracle_count(key):
     except Exception as e:
         print(f"  ❌ 从 Oracle 执行验证 SQL 失败 ({key}): {e}")
     return None
+
+
+def get_oracle_metrics(key):
+    """执行 Oracle 验证 SQL 并返回首行字典。"""
+    sql = ORACLE_VERIFY_QUERIES.get(key)
+    if not sql:
+        return None
+    try:
+        import oracledb
+        conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
+        cur = conn.cursor()
+        cur.execute(sql)
+        row = cur.fetchone()
+        columns = [desc[0].lower() for desc in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+        if row:
+            return dict(zip(columns, row))
+    except Exception as e:
+        print(f"  ❌ 从 Oracle 执行验证 SQL 失败 ({key}): {e}")
+    return None
+
+
+def calc_diff_pct(mysql_value, oracle_value):
+    """计算相对误差百分比。"""
+    mysql_num = float(mysql_value or 0)
+    oracle_num = float(oracle_value or 0)
+    if oracle_num == 0:
+        return 0.0 if mysql_num == 0 else 100.0
+    return abs(mysql_num - oracle_num) / abs(oracle_num) * 100
+
+
+def compare_metric(label, mysql_value, oracle_value, threshold_pct=ORACLE_DIFF_THRESHOLD_PCT):
+    """打印单项对账结果并返回是否通过。"""
+    diff = float(mysql_value or 0) - float(oracle_value or 0)
+    diff_pct = calc_diff_pct(mysql_value, oracle_value)
+    print(f"  {label} - Oracle: {float(oracle_value or 0):,.2f} | MySQL: {float(mysql_value or 0):,.2f} | 差异: {diff:+,.2f} ({diff_pct:.2f}%)")
+    return diff_pct <= threshold_pct
 
 def test_dim_product():
     """测试商品维度表"""
@@ -151,6 +192,10 @@ def test_dim_channel():
     main_total = cursor.fetchone()[0]
     print(f"  主要渠道数: {main_total}")
 
+    cursor.execute("SELECT COUNT(*) FROM dim_channel WHERE WING_CODE IS NOT NULL AND TRIM(WING_CODE) <> ''")
+    wing_code_filled = cursor.fetchone()[0]
+    print(f"  WING_CODE 非空数: {wing_code_filled}")
+
     cursor.execute("""
         SELECT platform_type, COUNT(*) AS cnt
         FROM dim_channel
@@ -161,10 +206,7 @@ def test_dim_channel():
     for row in cursor.fetchall():
         print(f"    {row[0]}: {row[1]}")
 
-    cursor.execute("SELECT COUNT(*) FROM dim_channel WHERE WING_CODE = 'DS001'")
-    has_store_mapping = cursor.fetchone()[0]
-
-    if total == 0 or has_store_mapping == 0:
+    if total == 0 or main_total == 0 or wing_code_filled != total:
         print("  ❌ 渠道维度缺少关键基础数据")
         status = "❌ FAIL"
     else:
@@ -214,11 +256,11 @@ def test_dws_inventory():
     print(f"  Oracle SQL数据量: {oracle_count:,}")
     print(f"  差异: {diff:+,} ({abs(diff)/oracle_count*100:.2f}%)")
     
-    if abs(diff) <= 5:
-        print(f"  ✓ 数据量与Oracle基本一致")
+    if calc_diff_pct(main_products, oracle_count) <= ORACLE_DIFF_THRESHOLD_PCT:
+        print(f"  ✓ 数据量与Oracle对齐（阈值 {ORACLE_DIFF_THRESHOLD_PCT}%）")
         status = "✅ PASS"
     else:
-        print(f"  ⚠️ 数据量与Oracle差异较大")
+        print(f"  ⚠️ 数据量与Oracle差异超过 {ORACLE_DIFF_THRESHOLD_PCT}%")
         status = "⚠️ WARNING"
     
     conn.close()
@@ -240,7 +282,8 @@ def test_dws_sales():
     cursor.execute(f"""
         SELECT COUNT(*) 
         FROM dws_sales_daily 
-        WHERE date_id >= {date_30_ago}
+                WHERE date_id >= {date_30_ago}
+                    AND (store_code LIKE 'DS%%' OR is_cloud_store='Y')
     """)
     total = cursor.fetchone()[0]
     print(f"  近30天销售记录: {total:,}")
@@ -257,6 +300,24 @@ def test_dws_sales():
     amounts = cursor.fetchone()
     print(f"  近30天销售额(电商+云仓): {amounts[0]:,.0f}元")
     print(f"  近30天退货额: {amounts[1]:,.0f}元")
+
+    mysql_metrics = {
+        'row_count': total,
+        'sales_amount': amounts[0] or 0,
+        'return_amount': amounts[1] or 0,
+    }
+
+    oracle_metrics = get_oracle_metrics('dws_sales_30d_summary')
+    if oracle_metrics:
+        print(f"\n  Oracle 对账（阈值 {ORACLE_DIFF_THRESHOLD_PCT}%）:")
+        metric_results = [
+            compare_metric('近30天记录数', mysql_metrics['row_count'], oracle_metrics.get('row_count', 0)),
+            compare_metric('近30天销售额', mysql_metrics['sales_amount'], oracle_metrics.get('sales_amount', 0)),
+            compare_metric('近30天退货额', mysql_metrics['return_amount'], oracle_metrics.get('return_amount', 0)),
+        ]
+    else:
+        print("\n  ⚠️ 未获取到 Oracle 销售对账结果，跳过销售口径百分比校验")
+        metric_results = [True]
     
     # 检查是否有负数记录（负数代表退货，属于正常情况），统计并报告即可
     cursor.execute(f"""
@@ -279,6 +340,10 @@ def test_dws_sales():
     else:
         print(f"  ✓ 数据质量检查通过（无负数记录）")
         status = "✅ PASS"
+
+    if status == "✅ PASS" and not all(metric_results):
+        print(f"  ⚠️ Oracle/MySQL 销售对账超过 {ORACLE_DIFF_THRESHOLD_PCT}%")
+        status = "⚠️ WARNING"
     
     conn.close()
     return status
@@ -349,11 +414,11 @@ def test_ads_health():
     print(f"  MySQL ETL数据量: {total:,}")
     print(f"  差异: {diff:+,} ({abs(diff)/oracle_count*100:.2f}%)")
     
-    if abs(diff) <= 5:
-        print(f"  ✓ 数据量与Oracle基本一致")
+    if calc_diff_pct(total, oracle_count) <= ORACLE_DIFF_THRESHOLD_PCT:
+        print(f"  ✓ 数据量与Oracle对齐（阈值 {ORACLE_DIFF_THRESHOLD_PCT}%）")
         status = "✅ PASS"
     else:
-        print(f"  ⚠️ 数据量与Oracle差异较大")
+        print(f"  ⚠️ 数据量与Oracle差异超过 {ORACLE_DIFF_THRESHOLD_PCT}%")
         status = "⚠️ WARNING"
     
     conn.close()

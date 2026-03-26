@@ -6,6 +6,790 @@
 
 ---
 
+### [2026-03-24 09:59] · GitHub Copilot · 填入 DBHub MySQL DSN
+
+**摘要**：将工作区级 DBHub MCP 配置改为直接使用已编码的本地 MySQL DSN
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.vscode/mcp.json` | 修改 | 移除输入框并内嵌 DBHub MySQL DSN |
+
+**Copilot 接棒须知**：
+- 本轮仅修改工作区级 .vscode/mcp.json，本地密码仍保存在 VS Code 忽略目录内，不进入 git。
+- 若后续密码变更，需要同步更新 .vscode/mcp.json 中的 -Dsn 参数。
+
+**未完成项**：
+- [ ] 在 VS Code 中重载窗口或重开聊天，让更新后的工作区级 mcp.json 重新注册。
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-24 09:50] · GitHub Copilot · 修复 DBHub MCP 启动兼容性
+
+**摘要**：为工作区 DBHub 改用本地 Node 22 启动，绕过系统 Node 24 下 better-sqlite3 安装失败问题
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.gitignore` | 修改 | 忽略本地 Node 22 运行时目录 |
+| `.vscode/mcp.json` | 修改 | 恢复工作区级 DBHub MCP 配置并切到本地启动脚本 |
+| `.vscode/start_dbhub.ps1` | 新增 | 用本地 Node 22 和 dbhub 0.19.0 启动 MCP server |
+
+**Copilot 接棒须知**：
+- 当前根因已确认是系统 Node 24 下 @bytebase/dbhub 依赖 better-sqlite3 安装失败，不是 DSN 或 MCP JSON 语法问题。
+- 工作区级 DBHub 现在依赖 .runtime/node-v22.14.0-win-x64；若目录丢失，重新下载该运行时即可。
+- 已用临时 SQLite DSN 验证启动脚本可进入 MCP server running on stdio。
+
+**未完成项**：
+- [ ] 在 VS Code 中重载窗口或重开聊天，让工作区级 mcp.json 重新注册。
+- [ ] 首次连接时输入 MySQL DSN，例如 mysql://user:password@host:3306/dbname。
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:54] · GitHub Copilot · 审计渠道相关 SQL 示例
+
+**摘要**：确认未发现把 WING_CODE 当作 DS*** 店仓编码使用的 SQL 示例，仅修正文档与DDL注释中的高风险表述
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/ETL业务逻辑说明.md` | 修改 | 将 WING_CODE 描述统一为渠道挂接码并移除已过时的待验证表述 |
+| `docs/DATA_CONTRACTS.md` | 修改 | 将 dim_channel.WING_CODE 字段说明改为渠道挂接码 |
+| `docs/MYSQL数据字典.md` | 修改 | 将 dim_channel.WING_CODE 备注改为保留Oracle原值 |
+| `SQL/alter_dim_channel_rename_store_code_to_wing_code.sql` | 修改 | 修正 WING_CODE 字段注释 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新文档审计产物 |
+
+**Copilot 接棒须知**：
+- 本轮专项审计未发现把 dim_channel.WING_CODE 当作 DS*** 店仓编码直接使用的 SQL 示例；现有 DS001/DS009 等示例主要集中在 C_STORE.CODE 口径的销售/库存 SQL。
+- 剩余风险主要不是 SQL 误用，而是个别文档/DDL 注释会把 WING_CODE 误描述为店仓编码直接来源，本轮已修正。
+
+**未完成项**：
+- [ ] 当前专项审计已完成；如需继续，可再单独审计 AGENT_HANDOFF_archive.md 等历史归档文档是否要批量更正旧结论
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:50] · GitHub Copilot · 补充渠道编码边界说明
+
+**摘要**：补清 dim_channel.WING_CODE 与 C_STORE.CODE 的边界文档，避免后续混用
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/业务逻辑与指标规范.md` | 修改 | 新增字段边界与实操提醒，区分渠道挂接码与店仓编码 |
+| `docs/SQL开发手册.md` | 修改 | 标注常用渠道店仓映射仅适用于 C_STORE.CODE |
+| `docs/数据结构与映射手册.md` | 修改 | 移除 dim_channel 未真实写库的旧说明 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新文档审计产物 |
+
+**Copilot 接棒须知**：
+- 本轮未改代码，只补文档边界说明。dim_channel 现网与自动化测试在上一轮已验证通过。
+- 若后续再出现 DS001 与 WING_CODE 混用，应优先回看 docs/业务逻辑与指标规范.md 的字段边界表。
+
+**未完成项**：
+- [ ] 当前收口已完成；如需继续，可单独审计渠道相关 SQL 示例是否还存在隐含字段混用
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:50] · GitHub Copilot · 配置 MCP 插件 dbhub
+
+**摘要**：为 VS Code 工作区新增 DBHub MCP 配置，采用启动时输入 DSN 的方式避免明文凭据落盘。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.vscode/mcp.json` | 新增 | 新增 VS Code 工作区级 DBHub MCP 配置 |
+
+**Copilot 接棒须知**：
+- DBHub 已按 VS Code Copilot 工作区配置方式落到 .vscode/mcp.json。
+- 当前配置采用 promptString 输入 DSN，不会把数据库密码写入仓库。
+- DBHub 官方支持 PostgreSQL/MySQL/MariaDB/SQL Server/SQLite，不支持 Oracle，因此这里只适合接本项目 MySQL。
+
+**未完成项**：
+- [ ] 首次使用时在 VS Code 中重载窗口或重开聊天，让 MCP 配置重新注册。
+- [ ] 首次连接时输入 MySQL DSN，例如 mysql://user:password@host:3306/dbname。
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:47] · GitHub Copilot · 核对并收口 dim_channel 现网数据
+
+**摘要**：确认 dim_channel 已真实回填且测试假设错误，修正断言后整套自动化测试全绿
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `test_etl_automation.py` | 修改 | 将 dim_channel 断言改为校验 WING_CODE 非空和主要渠道存在 |
+| `docs/ETL业务逻辑说明.md` | 修改 | 同步 dim_channel 现网核对结论 |
+| `docs/DATA_CONTRACTS.md` | 修改 | 更新 dim_channel 已真实回填说明 |
+| `docs/数据结构与映射手册.md` | 修改 | 移除 WING_CODE 必然为 DS 编码的错误假设 |
+| `docs/MYSQL数据字典.md` | 修改 | 将 dim_channel 目标库状态改为已验证 |
+| `docs/TODO_ISSUES.md` | 修改 | 关闭 dim_channel 待验证项 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新文档审计产物 |
+
+**Copilot 接棒须知**：
+- 2026-03-23 实查 Oracle O2O_RETAIL_CHANNEL 与 MySQL dim_channel：两边均 87 条，WING_CODE 全部非空，且源表本身不存在 WING_CODE=DS001。
+- 2026-03-23 17:45 复测 test_etl_automation.py 全部 PASS；dim_channel 已从 FAIL 修正为 PASS。
+
+**未完成项**：
+- [ ] 如后续仍需优化渠道口径，可单独梳理 WING_CODE 与业务侧 C_STORE.CODE 的关系边界，但当前收口已完成
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:38] · GitHub Copilot · 增强 dws_sales 并完成 Oracle 对账
+
+**摘要**：为 dws_sales 增加命名锁重试，修正零金额单据兜底口径，并将销售/库存/ADS 对账压到 0.5% 阈值内
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `etl_dws_sales.py` | 修改 | 新增命名锁重试并补齐 tot_amt_actual=0 行级数量兜底口径 |
+| `config.py` | 修改 | 新增 dws_sales_30d_summary Oracle 对账 SQL |
+| `test_etl_automation.py` | 修改 | 新增 0.5% 对账阈值与 dws_sales 汇总对账 |
+| `docs/ETL业务逻辑说明.md` | 修改 | 同步 dws_sales 命名锁与零金额单据口径 |
+| `docs/RUNBOOK.md` | 修改 | 同步 dws_sales 对账与命名锁说明 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新文档审计产物 |
+
+**Copilot 接棒须知**：
+- 2026-03-23 17:35 复测结果：dws_inventory=0.00%，dws_sales 记录数=0.39%/销售额=0.11%/退货额=0.07%，ads_health=0.00%。
+- test_etl_automation.py 仍有 dim_channel 失败项：当前检查要求 WING_CODE=DS001 存在，该项与本轮销售增强无关，若继续收口需单独核对 dim_channel 现网数据。
+
+**未完成项**：
+- [ ] 单独评估 dim_channel 基础数据校验是否应调整为当前实表事实
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:15] · GitHub Copilot · 确认17:05主链完整验证成功
+
+**摘要**：9步主链真实跑通，ODS->DWS->ADS 第一阶段闭环已完成
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/ODS打通自动化链路计划与续接入口.md` | 修改 | 更新为17:05主链实跑验证通过 |
+
+**Copilot 接棒须知**：
+- 2026-03-23 17:05 触发的 run_etl.py 已完整结束，结果为成功8/警告1/失败0；ods_sync、dws_sales、dws_inventory、ads_health 全部 SUCCESS。
+- 唯一保留提示为 dabo_ready=WARNING，原因是当日无达播记录，这不阻断主链完成。
+
+**未完成项**：
+- [ ] 如需继续第二阶段优化，优先解释 ODS 质量校验中的 Oracle/MySQL 差异来源
+- [ ] 如需继续增强运行稳定性，可评估是否将 dws_sales 也纳入命名锁保护
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 17:06] · GitHub Copilot · 修复库存与ADS死锁重跑问题
+
+**摘要**：为 dws_inventory 与 ads_health 增加命名锁和锁冲突重试，并让主链在上游失败时跳过 ADS
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `etl_dws_inventory.py` | 修改 | 增加命名锁与 1213/1205 退避重试 |
+| `etl_ads_health.py` | 修改 | 将当天覆盖改为单事务并增加命名锁重试 |
+| `run_etl.py` | 修改 | 修正 9 步编号并在上游失败时跳过 ADS |
+| `docs/ETL业务逻辑说明.md` | 修改 | 同步并发保护与 ADS 跳过逻辑 |
+| `docs/RUNBOOK.md` | 修改 | 补充 1213/1205 排查与命名锁说明 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录日快照覆盖场景的并发控制经验 |
+
+**Copilot 接棒须知**：
+- 模块级回归已通过：dws_inventory_daily 刷新到 17:03:34，ads_inventory_health 刷新到 17:03:51，未再出现删空后失败的状态。
+- 17:05 触发的完整 run_etl.py 终端输出仍被截断，当前只能确认前半段与结果表状态，若要最终收口可再读取这轮主链尾部或等待其完全结束。
+
+**未完成项**：
+- [ ] 确认 17:05 这轮 run_etl.py 的最终尾部汇总是否全部 SUCCESS
+- [ ] 如需进一步优化，评估是否将 dws_sales 也纳入命名锁保护，避免高频手工重跑时与覆盖性校验互相竞争
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 16:28] · GitHub Copilot · 完成 ODS 到 DWS 核心链路打通
+
+**摘要**：已完成主链接入 ODS、dws_sales 与 dws_inventory 改读 ODS，并同步库存字段与核心文档。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `config.py` | 修改 | 新增 ods_sync 任务展示名 |
+| `run_etl.py` | 修改 | 主链新增 ods_sync 步骤并复用 run_ods.run 执行 ODS 同步 |
+| `etl_dws_sales.py` | 修改 | 改为从 ods_m_retail、ods_m_retailitem 与 dim_store 聚合销售数据 |
+| `etl_ods_fa_storage.py` | 修改 | 补抽 qtypurchaserem 字段 |
+| `etl_dws_inventory.py` | 修改 | 改为从 ods_fa_storage 与 dim_store 生成库存快照 |
+| `SQL/create_ods_tables.sql` | 修改 | 为 ods_fa_storage 补充 qtypurchaserem 列 |
+| `SQL/alter_ods_fa_storage_add_qtypurchaserem.sql` | 新增 | 提供现网 MySQL 补列 SQL |
+| `README.md` | 修改 | 同步主链 9 步与 dws_sales/dws_inventory 已消费 ODS 的状态 |
+| `docs/ARCHITECTURE.md` | 修改 | 同步主链含 ODS 且 DWS 销售库存均已消费 ODS |
+| `docs/数据仓库与ETL手册.md` | 修改 | 同步销售库存链已消费 ODS 及库存示例 SQL |
+| `docs/ETL业务逻辑说明.md` | 修改 | 同步销售库存链数据流与依赖关系 |
+| `docs/DATA_CONTRACTS.md` | 修改 | 同步 ods_fa_storage、dws_sales_daily、dws_inventory_daily 契约 |
+| `docs/MYSQL数据字典.md` | 修改 | 补充 ods_fa_storage.qtypurchaserem 字段 |
+| `docs/数据结构与映射手册.md` | 修改 | 同步 dws_inventory_daily 对 ODS 与 dim_store 的映射 |
+| `docs/misc/ODS打通自动化链路计划与续接入口.md` | 修改 | 更新为第一阶段核心链路已打通 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新本轮文档对齐审计产物 |
+
+**Copilot 接棒须知**：
+- 第一阶段核心目标已完成：run_etl 主链含 ods_sync，dws_sales 与 dws_inventory 均已改为消费 ODS；DIM 仍直连 Oracle。
+- 库存链虽已改读 ODS，但现网 MySQL 仍需执行 SQL/alter_ods_fa_storage_add_qtypurchaserem.sql 后，ODS 库存 ETL 才能把新字段写入表结构。
+- qty_valid 当前仍沿用 qty 口径，不应因为切到 ODS 就改用 qtyvalid。
+
+**未完成项**：
+- [ ] 在目标 MySQL 执行 SQL/alter_ods_fa_storage_add_qtypurchaserem.sql。
+- [ ] 执行一次真实 ODS + DWS 主链验证，并抽样核对 dws_sales_daily、dws_inventory_daily、ads_inventory_health 结果。
+- [ ] 如需继续第二阶段后续工作，再评估 DIM 是否需要 ODS 化以及是否补快照/对账证据。
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 16:10] · GitHub Copilot · 补全 ODS 主链接入交接
+
+**摘要**：补全本轮 ODS 接入主链的完整交接信息，明确已完成范围、文档同步范围与下一步改造顺序。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `config.py` | 修改 | 新增 ods_sync 任务展示名 |
+| `run_etl.py` | 修改 | 主链新增 ods_sync 步骤并复用 run_ods.run 执行 ODS 同步 |
+| `README.md` | 修改 | 更新主链执行流程为 9 步并说明 ODS 已纳入主链 |
+| `docs/ARCHITECTURE.md` | 修改 | 同步主调度为 9 步并标注 ODS 已纳入主流水线 |
+| `docs/数据仓库与ETL手册.md` | 修改 | 同步 ODS 已纳入主链但 DWS 仍直连 Oracle 的现状 |
+| `docs/ETL业务逻辑说明.md` | 修改 | 更新执行顺序为 9 步并补充 ods_sync 说明 |
+| `docs/misc/ODS打通自动化链路计划与续接入口.md` | 修改 | 更新为第一阶段已开工并记录主链接入 ODS 状态 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新本轮文档对齐审计产物 |
+
+**Copilot 接棒须知**：
+- 当前只完成第一阶段第一步：ODS 已接入主链，但 dws_sales 和 dws_inventory 仍未改读 ODS。
+- 本轮文档只同步已实现层级，没有把 DWS 来源提前改写为 ODS。
+- 下一轮优先改 etl_dws_sales.py；库存链改造前先补 ods_fa_storage.qtypurchaserem。
+
+**未完成项**：
+- [ ] 继续将 etl_dws_sales.py 改为消费 ods_m_retail + ods_m_retailitem + dim_store。
+- [ ] 在库存链改造前补齐 etl_ods_fa_storage.py 与 SQL/create_ods_tables.sql 的 qtypurchaserem 字段。
+- [ ] dws_sales 与 dws_inventory 完成 ODS 化后，再集中同步 DATA_CONTRACTS 等核心文档。
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 16:04] · GitHub Copilot · 细化 ODS 打通第一阶段方案
+
+**摘要**：将 ODS 打通续接文档补充为可直接开工的文件级改造清单，明确销售可先切 ODS、库存需先补 qtypurchaserem 字段。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/ODS打通自动化链路计划与续接入口.md` | 修改 | 补充文件级改造清单、技术阻塞与推荐开工顺序 |
+
+**Copilot 接棒须知**：
+- 当前已明确：run_etl 接入 ODS 可先做，dws_sales 可先切 ODS，dws_inventory 需先补 ods_fa_storage.qtypurchaserem。
+- 若下一轮直接开改，优先触碰 config.py、run_etl.py、etl_dws_sales.py、etl_ods_fa_storage.py、SQL/create_ods_tables.sql、etl_dws_inventory.py。
+
+**未完成项**：
+- [ ] 下一轮若进入代码改造，先读取 docs/misc/ODS打通自动化链路计划与续接入口.md 的 v1.1 内容。
+- [ ] 开始改代码后，同轮需同步更新 ARCHITECTURE、DATA_CONTRACTS 等核心文档。
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 16:02] · GitHub Copilot · 新增 ODS 打通续接主文档
+
+**摘要**：新增 docs/misc 下的 ODS 打通自动化链路计划与续接入口，并在 README 补充最小入口，便于新窗口快速恢复上下文。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/misc/ODS打通自动化链路计划与续接入口.md` | 新增 | 沉淀 ODS 打通主题的现状事实、阶段计划、风险与续接提示词 |
+| `README.md` | 修改 | 补充 ODS 打通续接主文件入口 |
+
+**Copilot 接棒须知**：
+- 新窗口优先读取 docs/misc/ODS打通自动化链路计划与续接入口.md 与 docs/AGENT_HANDOFF.md 最新记录。
+- 该文档当前以第一阶段 ODS->DWS->ADS 最小闭环为主，不把 DIM ODS 化作为强制目标。
+
+**未完成项**：
+- [ ] 进入第一阶段重构前，先确认 run_etl.py 是否直接纳入 ODS 步骤。
+- [ ] 进入文档同步阶段时，再决定是否将新文档补充到全局同步检查清单。
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 15:35] · GitHub Copilot · 审计当前 ETL 链路打通情况
+
+**摘要**：确认 ODS 仍为独立链路，主自动化链仅覆盖 DIM/DWS/达播检查/ADS，且当前 DWS/DIM 运行时未消费 ODS。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮只读链路审计结论 |
+
+**Copilot 接棒须知**：
+- scheduled_etl.py 当前只调 run_etl.py，未串 run_ods.py。
+- run_etl.py 主链步骤不含任何 ods 任务，ODS 仍需独立调度。
+- etl_dws_sales.py 与 etl_dws_inventory.py 当前仍直连 Oracle，未切到消费 ods_m_retail/ods_m_retailitem/ods_fa_storage。
+- ADS 已消费 DWS 与 DIM，因此主链内部 DIM→DWS→ADS 是连通的，但 ODS→DWS/DIM 尚未打通。
+
+**未完成项**：
+- [ ] 如需真正打通自动化全链路，先明确 run_ods.py 与 run_etl.py 的调度前后关系及失败策略。
+- [ ] 如需真正让 ODS 成为事实源，需要把 dws_sales/dws_inventory 改为从 ODS 聚合，并评估 dim 是否仍保持直连 Oracle。
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 11:45] · GitHub Copilot · 继续推进第二阶段 agent 内化
+
+**摘要**：收敛 5 个 agent 的 description，并把推进重心切回 agents 可发现性验收
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/agents/planner-hefang.agent.md` | 修改 | 补充更贴近真实提问的触发词 |
+| `.github/agents/etl-auditor-hefang.agent.md` | 修改 | 补充字段血缘和自然语言触发词 |
+| `.github/agents/doc-syncer-hefang.agent.md` | 修改 | 补充数据字典与补文档类触发词 |
+| `.github/agents/db-inspector-hefang.agent.md` | 修改 | 补充结构漂移与快照核对触发词 |
+| `.github/agents/reviewer-hefang.agent.md` | 修改 | 补充风险评审类自然语言触发词 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新当前状态为 hooks 通过并切回第二阶段 agent 收敛 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.11 记录 agent description 收敛 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 agent description 应贴近真实提问方式的经验 |
+
+**Copilot 接棒须知**：
+- 当前 hooks 不再作为阶段阻断项，后续第三阶段只在不破坏现有逻辑的前提下再做体验优化。
+- 下一步优先在 agent picker 和自然语言场景里观察 5 个 agent 是否更容易被找到和理解。
+
+**未完成项**：
+- [ ] 在 VS Code Copilot 的 agent picker 中复测 5 个 agent 的可见性与描述可理解性
+- [ ] 根据真实使用反馈继续收窄各 agent 的 tools 集合，避免授权过宽
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 11:41] · GitHub Copilot · 确认 hooks 按逻辑正常执行
+
+**摘要**：用户已确认 Stop 与 PostToolUse 都能出现，本轮验收以 hooks 按逻辑运行作为通过标准
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮 hooks 运行验收结论 |
+
+**Copilot 接棒须知**：
+- 当前不再继续纠结 warning 卡片的 UI 细节，后续以日志命中、去重行为和真实触发结果作为主要验收依据。
+- Stop 与 PostToolUse 当前都已有真实触发证据；若后续再调 UI 展示，属于体验优化，不影响本轮通过。
+
+**未完成项**：
+- [ ] 若后续继续优化，仅在不破坏当前触发逻辑的前提下收敛 UI 文案或噪音
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 11:21] · GitHub Copilot · 收敛 Copilot hooks Python 化兼容层
+
+**摘要**：将 PostToolUse 切到 Python，并为旧的 pwsh/cmd 路径补齐兼容包装层
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/hooks/post-edit-reminder-hefang.json` | 修改 | PostToolUse 与 Stop 主入口统一收敛到 Python |
+| `scripts/copilot_post_edit_reminder.py` | 新增 | 新增 Python 版 PostToolUse 提醒主实现 |
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 改为转发到 Python 的兼容包装层 |
+| `scripts/copilot_session_close_reminder.ps1` | 修改 | 改为转发到 Python 的兼容包装层 |
+| `scripts/copilot_session_close_reminder.cmd` | 新增 | 恢复 Stop 旧 cmd 路径兼容包装层 |
+| `CHANGELOG.md` | 修改 | 记录 PostToolUse Python 化与兼容层策略 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新当前 hooks 主实现状态 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录宿主配置滞后时需保留旧入口兼容层的经验 |
+
+**Copilot 接棒须知**：
+- 当前 Stop 与 PostToolUse 主实现均已切到 Python，但需在真实 Copilot UI 中再观察宿主噪音是否下降。
+- 若当前会话仍沿用旧 hook 配置，兼容包装层已可避免旧 cmd/ps1 路径缺失导致的额外报错。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中复测 Python 版 Stop warning 卡片是否更干净
+- [ ] 在真实 Copilot 会话中复测 PostToolUse warning 是否摆脱 pwsh NativeCommandError 风格噪音
+- [ ] 根据真实 UI 结果决定何时移除旧的 pwsh/cmd 兼容包装层
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 11:08] · GitHub Copilot · 确认 Stop UI 可见并修正提示可读性
+
+**摘要**：真实 Copilot 会话已观察到 Warning from Stop hook，并将 Stop 提示文案收敛为 ASCII 以规避 stderr 中文乱码。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_session_close_reminder.ps1` | 修改 | 将 Stop warning 文案和动作提示改为 ASCII，优先保证宿主 UI 可读性 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 补充 Stop warning 已在真实 UI 显示且中文 stderr 会乱码的结论 |
+| `CHANGELOG.md` | 修改 | 补充 v0.8.10 的真实 UI 观测与 ASCII 收敛说明 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 Stop hook UI 可显示但中文 stderr 可能乱码的经验 |
+
+**Copilot 接棒须知**：
+- 当前 Stop hook 已有真实 Copilot UI 证据，后续不必再验证‘会不会显示’，重点转到‘是否稳定显示’和‘文案是否可读’。
+- 只要继续沿用 PowerShell 非零 stderr 路径，用户侧提示建议优先保持 ASCII；中文说明放日志、会议纪要和经验台账。
+- 本轮仅做了最小可读性修正，未改变 Stop 提醒的触发窗口、去重策略和证据来源。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中继续观察 Stop warning 的稳定性，而不只是单次可见
+- [ ] 根据后续复测结果决定是否也把 PostToolUse warning 文案收敛为 ASCII
+- [ ] 继续决定下一步优先做第二阶段 agent picker 验收，还是继续扩第三阶段提醒型 hooks
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 10:54] · GitHub Copilot · 新增 Stop 收口提醒试点
+
+**摘要**：新增基于 PostToolUse 日志信号的最小 Stop hook，并完成去重验证。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `.github/hooks/post-edit-reminder-hefang.json` | 修改 | 扩展 Stop 事件并接入 session close 脚本 |
+| `scripts/copilot_session_close_reminder.ps1` | 新增 | 基于最近 PostToolUse 命中日志输出非阻断收口提醒并做短时去重 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录第二个提醒型 hook 试点与当前边界 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.10 Stop 收口提醒试点记录 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 Stop hook 应优先复用运行时日志信号的经验 |
+
+**Copilot 接棒须知**：
+- 当前第三阶段已同时具备 PostToolUse 和 Stop 两个提醒型 hook 试点，但仍以非阻断 warning 为主，不进入 ask/deny。
+- Stop 提醒当前依赖 logs/copilot_post_edit_reminder.log 作为最近编辑证据，避免被历史未提交改动误报带偏；若后续窗口或去重策略不合适，应直接调 scripts/copilot_session_close_reminder.ps1。
+- 本轮已手工验证：首次运行 Stop 脚本返回 warning，短时间重复运行同签名返回 continue。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话里观察 Stop warning 是否稳定展示
+- [ ] 根据真实使用情况收敛最近窗口和去重时间
+- [ ] 继续决定下一步优先做第二阶段 agent picker 验收，还是继续扩第三阶段提醒型 hooks
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 10:45] · GitHub Copilot · 继续细分 PostToolUse docs 规则
+
+**摘要**：将文档类提醒继续拆到数据字典类和协作文治理类，并验证六类文档样例均命中预期规则。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 新增 data-dictionary 与 governance-docs 两类规则并收窄 runbook-docs 范围 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 docs 规则按后续动作差异继续细分 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.9 记录 docs 二次细分 |
+
+**Copilot 接棒须知**：
+- 当前 docs 细分的意义是让 warning 直接对应后续动作：数据字典关注字段/契约/映射，治理文档关注 handoff/lesson/todo 一致性，运行文档关注命令与说明同步。
+- 本轮最小验证已在日志中确认 MYSQL数据字典、AGENT_HANDOFF、RUNBOOK、README、会议纪要和普通 docs 分别命中 data-dictionary、governance-docs、runbook-docs、readme、meeting-minutes、doc。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中分别编辑数据字典类和协作文治理类文档，观察新的 warning 分类是否稳定显示
+- [ ] 若后续还要继续细分，只在某一类文件具有明确不同收口动作时再新增规则，避免为分类而分类
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 10:24] · GitHub Copilot · 细分 PostToolUse docs 提醒规则
+
+**摘要**：将文档类 PostToolUse 提醒拆为会议纪要类、运行文档类、README 类和兜底 docs 类，并完成最小命中验证。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 新增 meeting-minutes、runbook-docs、readme 三类 docs 规则并修正匹配正则 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 docs 细粒度规则扩展与当前阶段状态 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.8 记录 docs 细粒度规则扩展 |
+
+**Copilot 接棒须知**：
+- 当前 docs 类提醒已不再统一落到 doc；后续若继续细分，可优先考虑数据字典类与协作文档类，而不是继续增加过多低收益分支。
+- 本轮最小验证已在日志中确认四类输入分别命中 meeting-minutes、runbook-docs、readme 和 doc；若下一步做真实 UI 复测，优先改这四类文件观察 warning 展示。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中分别编辑会议纪要、RUNBOOK 和 README，观察不同 docs 子类 warning 是否稳定显示
+- [ ] 若后续继续扩规则，评估是否单独拆出数据字典类或交接治理类文档提醒
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 10:19] · GitHub Copilot · 调整 PostToolUse warning 返回策略
+
+**摘要**：将提醒型 hook 从 systemMessage 成功返回切换为非阻断 warning 退出码，并同步沉淀 UI 展示排障结论。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 命中提醒时改为 stderr 文案加退出码 1，未命中仍返回 continue JSON |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 systemMessage 与稳定 UI warning 的边界，并更新第三阶段当前状态 |
+| `CHANGELOG.md` | 修改 | 新增 v0.8.7 记录 warning 返回策略调整 |
+| `docs/AGENT_LESSONS.md` | 修改 | 补充 PostToolUse warning 展示排障经验 |
+
+**Copilot 接棒须知**：
+- 当前 hook 已不再把 systemMessage 作为 UI warning 的主要实现路径；若后续继续做提醒型 hooks，优先区分上下文注入与用户侧 warning 两类目标。
+- 本轮真实日志已出现 result=warning，说明宿主已接收到非阻断 warning 路径；下一步应让用户在真实聊天中复测卡片展示稳定性。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中再次编辑 docs 或 Copilot 自定义文件，观察 Warning from Post-ToolUse hook 是否比之前更稳定显示
+- [ ] 若 UI 仍不稳定，继续查 GitHub Copilot Chat Hooks 输出面板与版本差异，确认是否属于宿主预览行为限制
+
+
+
+
+
+
+
+
+
+
+
+---
+
+### [2026-03-23 09:55] · GitHub Copilot · 扩展 PostToolUse 提醒粒度
+
+**摘要**：继续推进第三阶段，扩展 `PostToolUse` 提醒分类，新增 Copilot 自定义能力文件的收口提醒，并明确日志优先于 UI warning。
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 扩展提醒规则，新增 Copilot 自定义能力文件场景，并细化 ETL / SQL / docs 提示文本 |
+| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 `PostToolUse` 第一轮扩展范围，并明确日志为执行真值 |
+| `CHANGELOG.md` | 修改 | 记录 v0.8.6 PostToolUse 提醒粒度扩展 |
+
+**Copilot 接棒须知**：
+- 当前第三阶段已经证明 `PostToolUse` hook 能在真实宿主里运行；后续扩展仍应优先选择“可日志验证”的提醒型逻辑，不把 UI warning 是否显示当成唯一验收标准。
+- 下一步若继续推进，优先考虑 `Stop` 收口提醒试点，而不是直接进入 `PreToolUse` 阻断型逻辑。
+
+**未完成项**：
+- [ ] 在真实 Copilot 会话中验证 Copilot 自定义能力文件修改时是否会命中新的 `copilot-customization` 提醒
+- [ ] 继续决定第三阶段下一步是扩 `PostToolUse` 细粒度规则，还是新增 `Stop` 收口提醒
+- [ ] 视实际误报情况继续收敛正则匹配和提示文案
+
+
+
+
+
+
+
+
+
+
+
+---
+
 ### [2026-03-20 17:33] · GitHub Copilot · 落最小提醒型 hook 试点与阶段收口 prompt
 
 **摘要**：第三阶段先启用一个非阻断的 `PostToolUse` 提醒型 hook，同时补齐阶段收口检查 prompt。
@@ -936,6 +1720,9 @@
 - [ ] 执行 SQL/alter_dim_channel_rename_store_code_to_wing_code.sql 完成现网字段改名
 - [ ] 执行 etl_dim_channel.py 或 run_etl.py 验证 dim_channel.WING_CODE 已按 Oracle WING_CODE 回填
 
+**后续校正（2026-03-23）**：
+- 现网已实查确认 Oracle `O2O_RETAIL_CHANNEL` 与 MySQL `dim_channel` 均为 87 条记录，`WING_CODE` 全部非空；该待验证项已在后续交接中关闭。
+
 
 
 
@@ -954,7 +1741,7 @@
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
 | `etl_dim_channel.py` | 修改 | store_code 改为直接抽取 WING_CODE |
-| `test_etl_automation.py` | 修改 | dim_channel 校验改为检查 store_code=DS001 |
+| `test_etl_automation.py` | 修改 | dim_channel 校验改为检查 store_code=DS001（该断言已于 2026-03-23 后续纠正） |
 | `SQL/create_dim_channel.sql` | 修改 | 修正 store_code 字段注释来源 |
 | `README.md` | 修改 | 修正 dim_channel 字段说明 |
 | `docs/DATA_CONTRACTS.md` | 修改 | 修正 dim_channel 契约与DQ规则 |
@@ -968,9 +1755,16 @@
 - 已核实 Oracle BOSNDS3.O2O_RETAIL_CHANNEL 共 87 条记录且 WING_CODE 全部非空，因此直连映射不会减少记录数。
 - 目标库是否已完成真实回填仍需执行 etl_dim_channel.py 或 run_etl.py 验证。
 
+**后续校正（2026-03-23）**：
+- 后续实查表明，`WING_CODE` 当前应按 Oracle 原始短码理解，不能继续把它硬编码假设为 `DS001` 这类店仓编码。
+- 对应自动化测试已改为检查 `WING_CODE` 非空和主要渠道存在，不再检查 `store_code=DS001`。
+
 **未完成项**：
 - [ ] 在目标环境执行 etl_dim_channel.py 或 run_etl.py，确认 dim_channel.store_code 已按 WING_CODE 回填
 - [ ] 回填后复核 docs/TODO_ISSUES.md 的 P1-001 是否可关闭
+
+**后续校正（2026-03-23）**：
+- 上述待办已在后续交接中完成关闭；现网目标库已确认真实回填完成，且不应再以“回填为 DS 编码”为验收标准。
 
 
 
@@ -1000,9 +1794,16 @@
 - 当前高置信结论是 WING_CODE 更符合 DS001 这类店仓编码语义，CODE 应保留为渠道档案编码。
 - 若目标库 dim_channel.store_code 仍为纯数字，需要先执行 etl_dim_channel.py 回填，再决定是否关闭 P1-001。
 
+**后续校正（2026-03-23）**：
+- 该阶段判断已被后续实查纠正：`WING_CODE` 不应再理解为 `DS001` 这类店仓编码语义，而应按 Oracle 原值保留。
+- 现网 MySQL `dim_channel` 与 Oracle `O2O_RETAIL_CHANNEL` 已完成对齐，相关 P1 待办已关闭。
+
 **未完成项**：
 - [ ] 在目标环境执行 etl_dim_channel.py 或 run_etl.py，验证 dim_channel.store_code 已回填为 DS 编码
 - [ ] 回填完成后重新评估并更新 docs/TODO_ISSUES.md 的 P1-001 状态
+
+**后续校正（2026-03-23）**：
+- 该“回填为 DS 编码”的验收标准已失效，后续统一改为以 Oracle 源表实值和目标表一致性为准。
 
 
 

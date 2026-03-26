@@ -59,7 +59,7 @@ dim_sku             │
 dim_store           ┘
 ```
 
-### 执行顺序（8步）
+### 执行顺序（9步）
 
 | 步骤 | 脚本 | 做什么 | 耗时 |
 |------|------|--------|------|
@@ -67,15 +67,16 @@ dim_store           ┘
 | 2 | etl_dim_sku | 把Oracle里的SKU条码信息复制到MySQL | ~1分钟 |
 | 3 | etl_dim_store | 把Oracle里的店仓信息复制到MySQL | ~1分钟 |
 | 4 | etl_dim_channel | 把Oracle里的电商渠道信息复制到MySQL | ~1分钟 |
-| 5 | etl_dws_sales | 把昨天（或今天）的销售数据拉过来 | ~5分钟 |
-| 6 | etl_dws_inventory | 拍一张当天的库存"照片" | ~10分钟 |
-| 7 | (达播就绪检查) | 看看今天的达播CSV是否已导入 | ~1秒 |
-| 8 | etl_ads_health | 在MySQL里算库存健康度 | ~5分钟 |
+| 5 | ods_sync（run_ods） | 同步 ODS 原始层并执行 ODS 质量校验 | ~5分钟 |
+| 6 | etl_dws_sales | 把昨天（或今天）的销售数据拉过来（已消费ODS） | ~5分钟 |
+| 7 | etl_dws_inventory | 拍一张当天的库存"照片"（已消费ODS） | ~10分钟 |
+| 8 | (达播就绪检查) | 看看今天的达播CSV是否已导入 | ~1秒 |
+| 9 | etl_ads_health | 在MySQL里算库存健康度 | ~5分钟 |
 
 **调度任务键名（run_etl.py）**：
-dim_product / dim_sku / dim_store / dim_channel / dws_sales / dws_inventory / dabo_ready / ads_health
+dim_product / dim_sku / dim_store / dim_channel / ods_sync / dws_sales / dws_inventory / dabo_ready / ads_health
 
-**依赖关系**：步骤1-4可以独立跑，步骤8依赖步骤1-6的结果。
+**依赖关系**：步骤1-4可以独立跑；步骤5 为 ODS 原始层准备步骤；步骤6-7 当前已消费 ODS；步骤9依赖步骤1-7的结果。
 
 ---
 
@@ -234,7 +235,7 @@ C_AREA  (区域表)   ─┘──→  dim_store (店仓维度表)
 
 ### 一句话
 
-**把 Oracle 里的电商渠道主档 O2O_RETAIL_CHANNEL 同步到 MySQL dim_channel，补齐仓库内可追溯链路。目标库现存数据是否已替换，仍需执行脚本后验证。**
+**把 Oracle 里的电商渠道主档 O2O_RETAIL_CHANNEL 同步到 MySQL dim_channel，补齐仓库内可追溯链路。2026-03-23 已实查确认目标库现存数据已完成回填。**
 
 ### 数据流
 
@@ -247,7 +248,7 @@ O2O_RETAIL_CHANNEL ───────────────→ dim_channel 
 ### 具体做了什么
 
 1. **从Oracle抽数**：读取 `ID / NAME / CODE / WING_CODE / ISACTIVE`
-2. **补齐店仓映射**：`WING_CODE = O2O_RETAIL_CHANNEL.WING_CODE`，直接保留 DS001 这类店仓编码
+2. **补齐店仓映射**：`WING_CODE = O2O_RETAIL_CHANNEL.WING_CODE`，直接保留 Oracle 源值；2026-03-23 已核对当前源表与目标表中该字段均为非空，但现网值并不体现为 `DS001` 这类编码
 3. **计算主要渠道**：按已在文档中确认的渠道ID集合打标 `is_main`
 4. **归类平台类型**：根据渠道名称归到天猫/京东/抖音/小红书/视频号/唯品会/得物/其他
 5. **全量覆盖写入**：TRUNCATE → INSERT
@@ -259,7 +260,7 @@ O2O_RETAIL_CHANNEL ───────────────→ dim_channel 
 | channel_id | O2O_RETAIL_CHANNEL.ID | 主键 |
 | channel_name | O2O_RETAIL_CHANNEL.NAME | 渠道名称 |
 | channel_code | O2O_RETAIL_CHANNEL.CODE | 渠道档案编码，不直接等同店仓编码 |
-| WING_CODE | O2O_RETAIL_CHANNEL.WING_CODE | 店仓编码直接来源 |
+| WING_CODE | O2O_RETAIL_CHANNEL.WING_CODE | 渠道挂接码，按 Oracle 原值保留 |
 | is_main | 计算字段 | 主要渠道ID集映射 |
 | platform_type | 计算字段 | 按名称归类平台 |
 | is_active | O2O_RETAIL_CHANNEL.ISACTIVE | 是否有效 |
@@ -268,7 +269,7 @@ O2O_RETAIL_CHANNEL ───────────────→ dim_channel 
 
 - 原来 dim_channel 只有数据库里一张表，仓库内没有装载入口，审计时无法归因
 - 现在渠道维度与店仓维度一样，仓库内已经补齐 Oracle → MySQL 全量同步链路
-- 但该链路尚未在最新交接记录中证明已对目标库执行过真实写入，所以关闭待办前仍要检查 `WING_CODE` 是否已回填为 DS 编码
+- 2026-03-23 已核对 Oracle `O2O_RETAIL_CHANNEL` 与 MySQL `dim_channel`：两边均为 87 条记录，`WING_CODE` 全部非空，说明现网已完成真实回填
 
 ---
 
@@ -276,17 +277,17 @@ O2O_RETAIL_CHANNEL ───────────────→ dim_channel 
 
 ### 一句话
 
-**每天从Oracle拉取零售单数据，按「日期+店仓+商品+SKU」粒度汇总出销售量、销售额、退货量、退货额，写入MySQL。**
+**每天从 ODS 拉取零售单数据，按「日期+店仓+商品+SKU」粒度汇总出销售量、销售额、退货量、退货额，写入MySQL。**
 
 ### 数据流
 
 ```
 Oracle                                  MySQL
 ━━━━━                                  ━━━━━
-M_RETAILITEM (零售明细) ─┐
-M_RETAIL     (零售主表) ─┤
-C_STORE      (店仓)     ─┤──→  dws_sales_daily (日销售汇总)
-M_PRODUCT    (商品)     ─┘
+ods_m_retailitem (零售明细ODS) ─┐
+ods_m_retail     (零售主表ODS) ─┤
+dim_store        (店仓维度)    ─┤──→  dws_sales_daily (日销售汇总)
+                               ┘
 ```
 
 ### 具体做了什么
@@ -296,15 +297,17 @@ M_PRODUCT    (商品)     ─┘
    - 白天运行 → 查今天实时数据
    - 可通过参数 `days_back` 回溯更多天
 
-2. **从Oracle聚合抽数**：一条GROUP BY的SQL，直接在Oracle端完成汇总
+2. **从MySQL ODS 聚合抽数**：在 MySQL 端从 ODS 主表、ODS 明细表和店仓维度完成汇总
    - 分组维度：日期、店仓ID、店仓编码、云仓标识、商品ID、SKU ID
-   - 正单（TOT_AMT_ACTUAL > 0）汇总为销售数量/销售额
-   - 负单（TOT_AMT_ACTUAL < 0）汇总为退货数量/退货额（取绝对值）
-   - 订单数：**只计正单的不重复零售单数**
+  - 正单（零售单主表 `tot_amt_actual > 0`）汇总为销售数量/销售额
+  - 负单（零售单主表 `tot_amt_actual < 0`）汇总为退货数量/退货额（取绝对值）
+  - 当 `tot_amt_actual = 0` 时，按行级 `qty` 正负兜底：正数归总销，负数归退货
+  - 订单数：**计入正单，或 `tot_amt_actual = 0` 且行级数量为正的零售单**
 
 3. **先删后插**（增量同步）：
-   - 先删除MySQL中该日期范围的旧数据
-   - 再插入新数据
+  - 先申请 `hefang_dw:dws_sales_daily` 命名锁，避免多个重跑会话同时覆盖同一批日期
+  - 在同一事务里删除 MySQL 中该日期范围的旧数据，再插入新数据
+  - 若遇到 `1213/1205` 或命名锁超时，最多退避重试 3 次
 
 4. **自动回补**（run_etl.py中）：
    - 检查近30天数据是否覆盖完整
@@ -313,9 +316,10 @@ M_PRODUCT    (商品)     ─┘
 ### 关键业务规则
 
 ```
-销售判断：看零售单主表的 TOT_AMT_ACTUAL
+销售判断：优先看 ODS 零售单主表的 tot_amt_actual
   > 0 → 这是一笔销售（出库）
   < 0 → 这是一笔退货（入库）
+  = 0 → 用行级 qty 正负兜底，避免全额优惠/核销单被漏算
 
 ⚠️ 重要过滤条件（写死在SQL里）：
   - ISACTIVE = 'Y' 且 STATUS = 2（已审核）
@@ -331,18 +335,18 @@ M_PRODUCT    (商品)     ─┘
 
 | 字段 | 说明 | 计算逻辑 |
 |------|------|----------|
-| date_id | 日期 | M_RETAIL.BILLDATE |
-| store_id | 店仓ID | M_RETAIL.C_STORE_ID |
-| store_code | 店仓编码 | C_STORE.CODE |
-| is_cloud_store | 云仓标识 | C_STORE.IS_ALLO2OSTORAGE |
-| product_id | 商品ID | M_RETAILITEM.M_PRODUCT_ID |
-| m_productalias_id | SKU ID | M_RETAILITEM.M_PRODUCTALIAS_ID |
-| sales_qty | 销售数量 | SUM(QTY) WHERE 正单 |
-| sales_amount | 销售金额 | SUM(TOT_AMT_ACTUAL) WHERE 正单 |
-| sales_amount_list | 吊牌金额 | SUM(TOT_AMT_LIST) WHERE 正单 |
-| return_qty | 退货数量 | SUM(ABS(QTY)) WHERE 负单 |
-| return_amount | 退货金额 | SUM(ABS(TOT_AMT_ACTUAL)) WHERE 负单 |
-| order_count | 订单数 | COUNT(DISTINCT 正单的M_RETAIL.ID) |
+| date_id | 日期 | ods_m_retail.billdate |
+| store_id | 店仓ID | ods_m_retail.c_store_id |
+| store_code | 店仓编码 | dim_store.store_code |
+| is_cloud_store | 云仓标识 | dim_store.is_cloud_store |
+| product_id | 商品ID | ods_m_retailitem.m_product_id |
+| m_productalias_id | SKU ID | ods_m_retailitem.m_productalias_id |
+| sales_qty | 销售数量 | SUM(QTY) WHERE 正单或 `tot_amt_actual=0 且 qty>0` |
+| sales_amount | 销售金额 | SUM(TOT_AMT_ACTUAL) WHERE 正单或 `tot_amt_actual=0 且 qty>0` |
+| sales_amount_list | 吊牌金额 | SUM(TOT_AMT_LIST) WHERE 正单或 `tot_amt_actual=0 且 qty>0` |
+| return_qty | 退货数量 | SUM(ABS(QTY)) WHERE 负单或 `tot_amt_actual=0 且 qty<0` |
+| return_amount | 退货金额 | SUM(ABS(TOT_AMT_ACTUAL)) WHERE 负单或 `tot_amt_actual=0 且 qty<0` |
+| order_count | 订单数 | COUNT(DISTINCT 正单，或 `tot_amt_actual=0 且 qty>0` 的 ods_m_retail.id) |
 | etl_time | ETL时间 | 写入时间戳 |
 
 > **注意**：MySQL表中有 `net_qty` 和 `net_amount` 字段，但ETL不填充它们，未在代码实现写入（MySQL默认值为0）。如需净销量/净销售额，请在查询时自行计算：`net_qty = sales_qty - return_qty`。
@@ -361,21 +365,21 @@ backfill(20260101, 20260130)  # 补2026年1月整月数据
 
 ### 一句话
 
-**每天从Oracle拍一张库存"照片"——记录当天每个SKU在总仓和云仓的库存数量、采购欠数，写入MySQL。**
+**每天从 ODS 拍一张库存"照片"——记录当天每个SKU在总仓和云仓的库存数量、采购欠数，写入MySQL。**
 
 ### 数据流
 
 ```
-Oracle                              MySQL
-━━━━━                              ━━━━━
-FA_STORAGE (实时库存) ─┐
-C_STORE    (店仓)     ─┤──→  dws_inventory_daily (日库存快照)
-M_PRODUCT  (商品)     ─┘
+MySQL                                  MySQL
+━━━━━                                  ━━━━━
+ods_fa_storage (库存ODS) ─┐
+dim_store      (店仓维度) ─┤──→  dws_inventory_daily (日库存快照)
+                          ┘
 ```
 
 ### 具体做了什么
 
-1. **从Oracle查当前库存**：
+1. **从 ODS 查当前库存**：
    - 只查总仓(001)和云仓门店(IS_ALLO2OSTORAGE='Y')的库存
    - 只查有SKU条码的记录（M_PRODUCTALIAS_ID IS NOT NULL）
    - ISACTIVE = 'Y'（有效记录）
@@ -391,21 +395,23 @@ M_PRODUCT  (商品)     ─┘
    - 删除今天已有的数据（支持重跑）
    - 写入新数据
    - 如果中途失败，自动回滚，不会出现删了没写入的情况
+  - 写入前会先申请 `hefang_dw:dws_inventory_daily` 命名锁，避免多个重跑会话同时覆盖同一天快照
+  - 如果遇到 MySQL 死锁或锁等待超时，会按 5 秒、10 秒的节奏最多重试 3 次
 
 ### 关键字段
 
 | 字段 | 说明 | 来源 |
 |------|------|------|
 | date_id | 快照日期 | 当天日期(YYYYMMDD) |
-| store_id | 店仓ID | FA_STORAGE.C_STORE_ID |
-| store_code | 店仓编码 | C_STORE.CODE |
-| is_cloud_store | 云仓标识 | C_STORE.IS_ALLO2OSTORAGE |
-| product_id | 商品ID | FA_STORAGE.M_PRODUCT_ID |
-| m_productalias_id | SKU ID | FA_STORAGE.M_PRODUCTALIAS_ID |
-| qty | 库存数量 | FA_STORAGE.QTY |
-| qty_valid | 可用库存 | FA_STORAGE.QTY（注意：不是QTYVALID，因为源系统该字段未维护，全为0） |
+| store_id | 店仓ID | ods_fa_storage.c_store_id |
+| store_code | 店仓编码 | dim_store.store_code |
+| is_cloud_store | 云仓标识 | dim_store.is_cloud_store |
+| product_id | 商品ID | ods_fa_storage.m_product_id |
+| m_productalias_id | SKU ID | ods_fa_storage.m_productalias_id |
+| qty | 库存数量 | ods_fa_storage.qty |
+| qty_valid | 可用库存 | ods_fa_storage.qty（注意：当前仍沿用 qty 作为可用库存口径） |
 | qty_occupy | 占用数量 | 固定填0（源表字段未使用） |
-| qtypurchaserem | 采购欠数/在途 | FA_STORAGE.QTYPURCHASEREM（已下单未到货） |
+| qtypurchaserem | 采购欠数/在途 | ods_fa_storage.qtypurchaserem |
 | etl_time | ETL时间 | 写入时间戳 |
 
 ### 为什么要每天拍快照
@@ -450,6 +456,10 @@ dim_store (店仓维度)           ─┘
 - **时间变量**：date_30_ago_date / date_7_ago_date / today_date 用于达播时间窗口；date_7_ago_id 用于近7天销售窗口。
 
 #### 第1步：一条大SQL算出所有指标
+
+- 写入前会先申请 `hefang_dw:ads_inventory_health` 命名锁，避免多个会话同时重算当天 ADS 快照
+- 删除当天旧数据与重新插入结果放在同一事务里；如果插入失败，会整笔回滚，不会留下“当天数据已被清空”的中间态
+- 如果遇到 MySQL 死锁或锁等待超时，会按 5 秒、10 秒的节奏最多重试 3 次
 
 以库存汇总表为主表，LEFT JOIN销售、商品、SKU、达播数据：
 
@@ -630,22 +640,24 @@ dim_store (店仓维度)           ─┘
 
 ### 一句话
 
-**ETL的"总指挥"——按顺序执行8个步骤，统一处理异常、重试、发送企业微信通知。**
+**ETL的"总指挥"——按顺序执行9个步骤，统一处理异常、重试、发送企业微信通知。**
 
 ### 执行流程
 
 ```
 run_etl.py
   ├─> [1/8] etl_dim_product.run()     商品维度
-  ├─> [2/8] etl_dim_sku.run()         SKU维度
-  ├─> [3/8] etl_dim_store.run()       店仓维度
-  ├─> [4/8] etl_dim_channel.run()     渠道维度
-  ├─> [5/8] etl_dws_sales.run()       销售数据
+  ├─> [2/9] etl_dim_sku.run()         SKU维度
+  ├─> [3/9] etl_dim_store.run()       店仓维度
+  ├─> [4/9] etl_dim_channel.run()     渠道维度
+  ├─> [5/9] run_ods.run()             ODS 同步与质检
+  ├─> [6/9] etl_dws_sales.run()       销售数据
   │         ↳ 自动检查近30天覆盖度，不足则backfill
-  ├─> [6/8] etl_dws_inventory.run()   库存快照
-  ├─> [7/8] 达播数据就绪检查           查MySQL看今天有没有达播数据
-  └─> [8/8] etl_ads_health.run()      库存健康度计算
+  ├─> [7/9] etl_dws_inventory.run()   库存快照
+  ├─> [8/9] 达播数据就绪检查           查MySQL看今天有没有达播数据
+  └─> [9/9] etl_ads_health.run()      库存健康度计算
             ↳ 如果达播就绪，还会执行 backfill_dabo_fields()
+            ↳ 如果 dws_sales 或 dws_inventory 未成功，则本轮跳过 ADS，避免在不完整上游数据上继续计算
 
 - **达播latest_date**：达播就绪检查会记录最新日期（MAX sale_date）用于日志与告警。
 - 通用耗时统计：各ETL脚本使用 `start_time`/`end_time` 计算 duration（秒）。
@@ -850,6 +862,9 @@ A: 按销售额降序排列SKU，逐个累加占比。当一个SKU让累计占�
 
 | 版本 | 日期 | 变更内容 |
 |------|------|----------|
+| v2.3 | 2026-03-23 | 修正 dim_channel 现网核对结论，明确 WING_CODE 不应假设为 DS 编码 |
+| v2.2 | 2026-03-23 | 补充 dws_sales 命名锁重试与 `tot_amt_actual=0` 行级数量兜底口径 |
+| v2.1 | 2026-03-23 | 补充 9 步主链、库存/ADS 命名锁重试与 ADS 上游失败跳过逻辑 |
 | v1.0 | 2026-02-27 | 初版：ETL人话版说明 |
 | v1.1 | 2026-02-28 | 补充调度任务键名（run_etl.py） |
 | v1.2 | 2026-02-28 | 补充ODS批次号与质量校验参数说明 |

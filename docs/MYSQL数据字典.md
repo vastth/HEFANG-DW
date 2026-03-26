@@ -152,16 +152,16 @@
 
 ## dim_channel
 - 描述: 电商渠道维度表
-- 状态: 已实现（ETL + 建表脚本）；目标库现存数据待验证
+- 状态: 已实现（ETL + 建表脚本）；目标库现存数据已验证
 - 证据: reports/snapshot_mysql_hefangdw_schema.json（2026-03-01 01:41:36）
-- 说明: 仓库内已提供 [etl_dim_channel.py](etl_dim_channel.py#L1-L131) 与 [SQL/create_dim_channel.sql](SQL/create_dim_channel.sql#L1-L11)，来源为 Oracle `O2O_RETAIL_CHANNEL`；当前目标字段名为 `WING_CODE`，直接映射源表 `WING_CODE`，`CODE` 仅保留为渠道编码；但 [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md#L55-L61) 记录此前未执行真实 ETL 写库，因此仍需验证目标库数据是否已完成回填。
+- 说明: 仓库内已提供 [etl_dim_channel.py](etl_dim_channel.py#L1-L131) 与 [SQL/create_dim_channel.sql](SQL/create_dim_channel.sql#L1-L11)，来源为 Oracle `O2O_RETAIL_CHANNEL`；当前目标字段名为 `WING_CODE`，直接映射源表 `WING_CODE`，`CODE` 仅保留为渠道编码。2026-03-23 已实查 Oracle 与 MySQL，确认两边均为 87 条记录且 `WING_CODE` 全部非空。
 
 | 序号 | 字段名 | 类型 | 可空 | 默认值 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | channel_id | int | NO |  | 渠道ID |
 | 2 | channel_name | varchar(50) | NO |  | 渠道名称 |
 | 3 | channel_code | varchar(20) | YES |  | 渠道编码 |
-| 4 | WING_CODE | varchar(40) | YES |  | 对应店仓编码 |
+| 4 | WING_CODE | varchar(40) | YES |  | 渠道挂接码（保留 Oracle 原值） |
 | 5 | is_main | tinyint | YES | 0 | 是否主要渠道 |
 | 6 | platform_type | varchar(20) | YES |  | 平台类型 |
 | 7 | is_active | char(1) | YES | Y | 是否有效 |
@@ -332,9 +332,10 @@
 | 4 | m_productalias_id | bigint | YES |  |  |
 | 5 | qty | decimal(18,4) | YES |  |  |
 | 6 | qtyvalid | decimal(18,4) | YES |  |  |
-| 7 | isactive | char(1) | YES |  |  |
-| 8 | etl_batch_id | varchar(32) | NO |  |  |
-| 9 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP |  |
+| 7 | qtypurchaserem | decimal(18,4) | YES |  | 采购欠数/在途 |
+| 8 | isactive | char(1) | YES |  |  |
+| 9 | etl_batch_id | varchar(32) | NO |  |  |
+| 10 | etl_loaded_at | datetime | YES | CURRENT_TIMESTAMP |  |
 
 ## ods_m_retail
 - 描述: ODS-零售单主表
@@ -402,3 +403,4 @@
 | v1.7 | 2026-03-18 | 补充 dim_channel ETL 来源，并标注目标库现存数据待验证 |
 | v1.8 | 2026-03-18 | 将 dim_channel 店仓字段重命名为 WING_CODE 并对齐 Oracle 来源 |
 | v1.9 | 2026-03-18 | 按最新快照修正 ads_inventory_health 字段顺序、可空性与默认值 |
+| v2.0 | 2026-03-23 | 确认 dim_channel 目标库现存数据已与 Oracle 对齐 |

@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 何方珠宝 - 库存数据ETL
-从Oracle FA_STORAGE同步到MySQL dws_inventory_daily
+从MySQL ODS ods_fa_storage 聚合到 dws_inventory_daily
 策略：每日全量快照
 """
 
-import oracledb
+import logging
+import time
+from datetime import datetime
+
 import pandas as pd
 from sqlalchemy import create_engine, text
-from datetime import datetime
-import logging
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from config import MYSQL_CONN_STR
 
 # 配置日志
 logging.basicConfig(
@@ -21,46 +22,51 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def extract_from_oracle():
-    """从Oracle抽取当前库存数据"""
+RETRYABLE_MYSQL_LOCK_KEYWORDS = (
+    '1213',
+    '1205',
+    'deadlock found',
+    'lock wait timeout exceeded',
+    '未能获取命名锁',
+)
+
+
+def _is_retryable_mysql_lock_error(exc):
+    message = str(exc).lower()
+    return any(keyword in message for keyword in RETRYABLE_MYSQL_LOCK_KEYWORDS)
+
+
+def extract_from_ods():
+    """从MySQL ODS 抽取当前库存数据"""
 
     # 移除了不存在的QTYOCCUPY字段
     # ⚠️ 注意：不要过滤QTY=0的记录！Oracle原SQL没有此过滤
     #         FA_STORAGE中QTY=0的记录仍然表示该商品在仓库中存在过/被管理
-    sql = """
+    sql = text("""
     SELECT
-        fs.C_STORE_ID AS store_id,
-        s.CODE AS store_code,
-        NVL(s.IS_ALLO2OSTORAGE, 'N') AS is_cloud_store,
-        fs.M_PRODUCT_ID AS product_id,
-        fs.M_PRODUCTALIAS_ID AS m_productalias_id,
-        fs.QTY AS qty,
-        fs.QTY AS qty_valid,
-        NVL(fs.QTYPURCHASEREM, 0) AS qtypurchaserem
-    FROM FA_STORAGE fs
-    LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
-    LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
-    WHERE fs.ISACTIVE = 'Y'
-        AND fs.M_PRODUCTALIAS_ID IS NOT NULL
-        AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
-    """
+        fs.c_store_id AS store_id,
+        COALESCE(s.store_code, '') AS store_code,
+        COALESCE(s.is_cloud_store, 'N') AS is_cloud_store,
+        fs.m_product_id AS product_id,
+        fs.m_productalias_id AS m_productalias_id,
+        fs.qty AS qty,
+        fs.qty AS qty_valid,
+        COALESCE(fs.qtypurchaserem, 0) AS qtypurchaserem
+    FROM ods_fa_storage fs
+    LEFT JOIN dim_store s ON fs.c_store_id = s.store_id
+    WHERE fs.isactive = 'Y'
+      AND fs.m_productalias_id IS NOT NULL
+      AND (s.store_code = '001' OR s.is_cloud_store = 'Y')
+    """)
 
-    logger.info("连接Oracle数据库...")
-    conn = oracledb.connect(
-        user=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        dsn=ORACLE_DSN
-    )
+    logger.info("连接MySQL数据库，读取 ODS 库存数据...")
+    engine = create_engine(MYSQL_CONN_STR)
 
     logger.info("执行SQL查询...")
-    cursor = conn.cursor()
-    cursor.execute(sql)
-    columns = [col[0].lower() for col in cursor.description]
-    data = cursor.fetchall()
-    df = pd.DataFrame(data, columns=columns)
-
-    cursor.close()
-    conn.close()
+    try:
+        df = pd.read_sql(sql, engine)
+    finally:
+        engine.dispose()
 
     logger.info(f"抽取完成，共 {len(df)} 条记录")
     return df
@@ -138,22 +144,41 @@ def load_to_mysql(df):
     engine = create_engine(MYSQL_CONN_STR)
 
     today = int(datetime.now().strftime('%Y%m%d'))
+    lock_name = 'hefang_dw:dws_inventory_daily'
+    max_attempts = 3
 
     try:
-        logger.info(f"删除当天旧数据（{today}）并写入新数据（单事务）...")
-        # 使用同一事务执行删除与批量插入；若中途失败，SQLAlchemy将回滚事务
-        with engine.begin() as conn:
-            conn.execute(text("DELETE FROM dws_inventory_daily WHERE date_id = :d"), {"d": today})
-            df.to_sql(
-                name='dws_inventory_daily',
-                con=conn,
-                if_exists='append',
-                index=False,
-                chunksize=5000,
-                method=None  # 走默认插入方式以保证事务一致性
-            )
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(f"删除当天旧数据（{today}）并写入新数据（单事务，第 {attempt}/{max_attempts} 次）...")
+                with engine.begin() as conn:
+                    got_lock = conn.execute(
+                        text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
+                        {"lock_name": lock_name, "timeout_seconds": 30},
+                    ).scalar()
+                    if got_lock != 1:
+                        raise TimeoutError(f"未能获取命名锁: {lock_name}")
 
-        logger.info(f"写入完成，共 {len(df)} 条记录")
+                    conn.execute(text("DELETE FROM dws_inventory_daily WHERE date_id = :d"), {"d": today})
+                    df.to_sql(
+                        name='dws_inventory_daily',
+                        con=conn,
+                        if_exists='append',
+                        index=False,
+                        chunksize=5000,
+                        method=None,
+                    )
+
+                logger.info(f"写入完成，共 {len(df)} 条记录")
+                break
+            except Exception as exc:
+                if attempt >= max_attempts or not _is_retryable_mysql_lock_error(exc):
+                    raise
+                wait_seconds = attempt * 5
+                logger.warning(
+                    f"检测到可重试锁冲突（第 {attempt}/{max_attempts} 次）：{exc}；{wait_seconds} 秒后重试..."
+                )
+                time.sleep(wait_seconds)
     finally:
         engine.dispose()
 
@@ -168,7 +193,7 @@ def run():
 
     try:
         # Extract
-        df = extract_from_oracle()
+        df = extract_from_ods()
 
         # Transform
         df = transform(df)
