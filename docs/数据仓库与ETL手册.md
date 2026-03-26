@@ -291,8 +291,8 @@ SKU信息 ← dim_sku
 | dim_sku | M_PRODUCT_ALIAS + M_ATTRIBUTESETINSTANCE | 全量覆盖 | SKU信息可能改 |
 | dim_store | C_STORE + C_AREA | 全量覆盖 | 门店可能新增 |
 | dim_channel | O2O_RETAIL_CHANNEL | 全量覆盖 | 电商渠道与店仓映射 |
-| dws_sales_daily | M_RETAIL + M_RETAILITEM + C_STORE + M_PRODUCT | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天（全渠道、全品类；业务筛选下沉ADS） |
-| dws_inventory_daily | FA_STORAGE + C_STORE + M_PRODUCT | 全量快照 | 每日记录当天库存（总仓+云仓，不做主销品类过滤） |
+| dws_sales_daily | ods_m_retail + ods_m_retailitem + dim_store | 增量（按日期） | 智能判断：凌晨查昨天，白天查今天（全渠道、全品类；业务筛选下沉ADS） |
+| dws_inventory_daily | ods_fa_storage + dim_store | 全量快照 | 每日记录当天库存（总仓+云仓，不做主销品类过滤） |
 | ads_inventory_health | MySQL内计算 | 重新计算 | 基于dws层 |
 | ads_dabo_daily_sales | CSV文件 | 文件驱动 | 监听例行/紧急目录 |
 | log_dabo_import | ETL日志 | 追加写入 | 每次导入记录 |
@@ -318,7 +318,7 @@ SKU信息 ← dim_sku
 
 ### 3.2 同步时序
 
-**ODS（可选，独立执行）**
+**ODS（已纳入主链，也可独立执行）**
 ```
 任意时间  run_ods.py（默认增量，--full 可全量）
 ```
@@ -329,14 +329,17 @@ SKU信息 ← dim_sku
 03:08  同步dim_sku（约1分钟）
 03:10  同步dim_store（约1分钟）
 03:11  同步dim_channel（约1分钟）
-03:13  同步dws_sales_daily（智能判断）（约5分钟）
-03:18  同步dws_inventory_daily（约10分钟）
-03:28  达播数据就绪检查/回填（当日）
-03:30  计算ads_inventory_health（约5分钟）
-03:35  ETL结束
+03:12  同步ODS原始层并执行质检（约5分钟）
+03:17  同步dws_sales_daily（智能判断）（约5分钟，已消费ODS）
+03:22  同步dws_inventory_daily（约10分钟，已消费ODS）
+03:32  达播数据就绪检查/回填（当日）
+03:34  计算ads_inventory_health（约5分钟）
+03:39  ETL结束
 06:00  Tableau数据源刷新
 实时  达播CSV监听（例行/紧急目录）
 ```
+
+说明：自 2026-03-23 起，`run_etl.py` 已纳入 ODS 同步步骤；`dws_sales_daily` 与 `dws_inventory_daily` 均已切换为消费 ODS，当前主链剩余的 Oracle 直连主要在 DIM 层。
 
 ---
 
@@ -385,22 +388,21 @@ today = datetime.now().strftime('%Y%m%d')
 mysql.execute(f"DELETE FROM dws_inventory_daily WHERE date_id = {today}")
 
 # 抽取当前库存
-df = oracle.query("""
+df = mysql.query("""
     SELECT 
-        fs.C_STORE_ID AS store_id,
-        s.CODE AS store_code,
-        NVL(s.IS_ALLO2OSTORAGE, 'N') AS is_cloud_store,
-        fs.M_PRODUCT_ID AS product_id,
-        fs.M_PRODUCTALIAS_ID AS m_productalias_id,
-        fs.QTY AS qty,
-        fs.QTY AS qty_valid,
-        NVL(fs.QTYPURCHASEREM, 0) AS qtypurchaserem
-    FROM FA_STORAGE fs
-        LEFT JOIN C_STORE s ON fs.C_STORE_ID = s.ID
-        LEFT JOIN M_PRODUCT p ON fs.M_PRODUCT_ID = p.ID
-        WHERE fs.ISACTIVE = 'Y'
-            AND fs.M_PRODUCTALIAS_ID IS NOT NULL
-            AND (s.CODE = '001' OR s.IS_ALLO2OSTORAGE = 'Y')
+        fs.c_store_id AS store_id,
+        COALESCE(s.store_code, '') AS store_code,
+        COALESCE(s.is_cloud_store, 'N') AS is_cloud_store,
+        fs.m_product_id AS product_id,
+        fs.m_productalias_id AS m_productalias_id,
+        fs.qty AS qty,
+        fs.qty AS qty_valid,
+        COALESCE(fs.qtypurchaserem, 0) AS qtypurchaserem
+    FROM ods_fa_storage fs
+        LEFT JOIN dim_store s ON fs.c_store_id = s.store_id
+        WHERE fs.isactive = 'Y'
+            AND fs.m_productalias_id IS NOT NULL
+            AND (s.store_code = '001' OR s.is_cloud_store = 'Y')
         -- 库存快照不做主销品过滤，口径在ADS层统一控制
 """)
 df['date_id'] = int(today)

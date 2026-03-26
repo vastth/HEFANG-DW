@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 查看交接记录
+    url: https://github.com/vastth/HEFANG-DW/blob/main/docs/AGENT_HANDOFF.md
+    about: 开改前先看最近一条交接记录，确认当前状态与未完成项。
+  - name: 查看待办与风险
+    url: https://github.com/vastth/HEFANG-DW/blob/main/docs/TODO_ISSUES.md
+    about: 若是待排期、待确认或风险项，先看现有待办是否已记录。
+  - name: 查看运行与排障手册
+    url: https://github.com/vastth/HEFANG-DW/blob/main/docs/RUNBOOK.md
+    about: 若问题更像运行故障、环境异常或脚本报错，先看运行手册再决定是否开 Issue。

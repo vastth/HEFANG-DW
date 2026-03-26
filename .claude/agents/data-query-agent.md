@@ -33,6 +33,6 @@ model: haiku
 - 若用户问题本质是结构审计，不返回业务数据值，改走结构快照或 MCP 描述表结构
 
 ## 兜底说明
-- 如果 MySQL MCP 失败，先告知用户检查 `.mcp.json` 与只读权限
+- 如果 MySQL MCP 失败，先告知用户优先检查工作区 `.vscode/mcp.json`、用户级 `mcp.json` 与只读权限；仓库根 `.mcp.json` 仅作为兼容/本地参考配置
 - 如果 Oracle MCP 不可用，但查询需求明确，可改用 `tools/query_data.py --source oracle`
 - 如果查询经常重复出现，建议新增模板沉淀到 `tools/query_data.py`

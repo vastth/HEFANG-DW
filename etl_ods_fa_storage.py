@@ -34,6 +34,7 @@ def extract_and_load():
         fs.M_PRODUCTALIAS_ID AS m_productalias_id,
         fs.QTY AS qty,
         fs.QTYVALID AS qtyvalid,
+        NVL(fs.QTYPURCHASEREM, 0) AS qtypurchaserem,
         fs.ISACTIVE AS isactive
     FROM FA_STORAGE fs
     """

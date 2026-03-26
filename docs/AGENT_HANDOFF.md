@@ -27,161 +27,135 @@
 
 ---
 
-### [2026-03-23 15:35] · GitHub Copilot · 审计当前 ETL 链路打通情况
+### [2026-03-26 10:34] · GitHub Copilot · 创建综合 PR
 
-**摘要**：确认 ODS 仍为独立链路，主自动化链仅覆盖 DIM/DWS/达播检查/ADS，且当前 DWS/DIM 运行时未消费 ODS。
+**摘要**：整理 ODS 主链接入、MCP 入口说明与 GitHub 协作模板改动，准备提交综合 PR
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮只读链路审计结论 |
+| `config.py` | 修改 | 新增 ods_sync 展示名并补 Oracle 对账 SQL |
+| `run_etl.py` | 修改 | 主链接入 ods_sync 并在上游失败时跳过 ads_health |
+| `etl_ods_fa_storage.py` | 修改 | 补抽 qtypurchaserem 字段 |
+| `etl_dws_sales.py` | 修改 | 改为消费 ODS 并增加命名锁重试 |
+| `etl_dws_inventory.py` | 修改 | 改为消费 ODS 并增加命名锁重试 |
+| `etl_ads_health.py` | 修改 | 增加命名锁与单事务覆盖 |
+| `test_etl_automation.py` | 修改 | 补充 Oracle 对账阈值与 dim_channel 校验调整 |
+| `SQL/create_ods_tables.sql` | 修改 | 为 ods_fa_storage 补 qtypurchaserem 列 |
+| `SQL/alter_ods_fa_storage_add_qtypurchaserem.sql` | 新增 | 提供现网 ODS 补列 SQL |
+| `.github/ISSUE_TEMPLATE/config.yml` | 新增 | 新增 Issue 模板统一入口配置 |
+| `.github/pull_request_template.md` | 新增 | 新增项目 PR 模板 |
+| `README.md` | 修改 | 同步主链 9 步与 ODS 接入说明 |
+| `docs/ARCHITECTURE.md` | 修改 | 同步主链含 ODS 与 MCP 入口现状 |
+| `docs/DATA_CONTRACTS.md` | 修改 | 同步 ODS 与 dim_channel 契约结论 |
+| `docs/ETL业务逻辑说明.md` | 修改 | 同步 ODS 消费链路与锁重试逻辑 |
+| `docs/RUNBOOK.md` | 修改 | 补充 MCP 主入口和锁冲突排查说明 |
+| `docs/数据仓库与ETL手册.md` | 修改 | 同步 ODS 已纳入主链且 DWS 已消费 ODS |
+| `docs/数据结构与映射手册.md` | 修改 | 修正 dim_channel 与库存映射说明 |
+| `docs/业务逻辑与指标规范.md` | 修改 | 补充 WING_CODE 与 C_STORE.CODE 字段边界 |
+| `docs/MYSQL数据字典.md` | 修改 | 同步 dim_channel 现网结论与 ODS 新字段 |
+| `docs/SQL开发手册.md` | 修改 | 标注渠道店仓映射仅适用于 C_STORE.CODE |
+| `docs/TODO_ISSUES.md` | 修改 | 关闭 dim_channel 待验证项 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 MCP 路径与字段语义经验 |
+| `AGENTS.md` | 修改 | 补充当前 MCP 可用性事实 |
 
 **Copilot 接棒须知**：
-- scheduled_etl.py 当前只调 run_etl.py，未串 run_ods.py。
-- run_etl.py 主链步骤不含任何 ods 任务，ODS 仍需独立调度。
-- etl_dws_sales.py 与 etl_dws_inventory.py 当前仍直连 Oracle，未切到消费 ods_m_retail/ods_m_retailitem/ods_fa_storage。
-- ADS 已消费 DWS 与 DIM，因此主链内部 DIM→DWS→ADS 是连通的，但 ODS→DWS/DIM 尚未打通。
+- 当前 PR 范围同时包含 ETL 主链改造、文档同步、MCP 入口说明和 GitHub 协作模板，审阅时建议按模块阅读。
+- 已执行 py_compile 与编辑器错误检查；未执行完整 test_etl_automation.py 和真实 run_etl.py 主链复跑。
 
 **未完成项**：
-- [ ] 如需真正打通自动化全链路，先明确 run_ods.py 与 run_etl.py 的调度前后关系及失败策略。
-- [ ] 如需真正让 ODS 成为事实源，需要把 dws_sales/dws_inventory 改为从 ODS 聚合，并评估 dim 是否仍保持直连 Oracle。
+- [ ] 如需进一步收口，执行真实数据库回归：test_etl_automation.py 与 run_etl.py。
+- [ ] 如需进一步收口，确认 scripts/check_doc_sync.py 当前是否存在长耗时或挂起场景。
 
 ---
 
-### [2026-03-23 11:45] · GitHub Copilot · 继续推进第二阶段 agent 内化
+### [2026-03-24 13:28] · GitHub Copilot · 补全 GitHub Issue 模板入口配置
 
-**摘要**：收敛 5 个 agent 的 description，并把推进重心切回 agents 可发现性验收
-
-**变更文件**：
-
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| `.github/agents/planner-hefang.agent.md` | 修改 | 补充更贴近真实提问的触发词 |
-| `.github/agents/etl-auditor-hefang.agent.md` | 修改 | 补充字段血缘和自然语言触发词 |
-| `.github/agents/doc-syncer-hefang.agent.md` | 修改 | 补充数据字典与补文档类触发词 |
-| `.github/agents/db-inspector-hefang.agent.md` | 修改 | 补充结构漂移与快照核对触发词 |
-| `.github/agents/reviewer-hefang.agent.md` | 修改 | 补充风险评审类自然语言触发词 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新当前状态为 hooks 通过并切回第二阶段 agent 收敛 |
-| `CHANGELOG.md` | 修改 | 新增 v0.8.11 记录 agent description 收敛 |
-| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 agent description 应贴近真实提问方式的经验 |
-
-**Copilot 接棒须知**：
-- 当前 hooks 不再作为阶段阻断项，后续第三阶段只在不破坏现有逻辑的前提下再做体验优化。
-- 下一步优先在 agent picker 和自然语言场景里观察 5 个 agent 是否更容易被找到和理解。
-
-**未完成项**：
-- [ ] 在 VS Code Copilot 的 agent picker 中复测 5 个 agent 的可见性与描述可理解性
-- [ ] 根据真实使用反馈继续收窄各 agent 的 tools 集合，避免授权过宽
-
-
----
-
-### [2026-03-23 11:41] · GitHub Copilot · 确认 hooks 按逻辑正常执行
-
-**摘要**：用户已确认 Stop 与 PostToolUse 都能出现，本轮验收以 hooks 按逻辑运行作为通过标准
+**摘要**：为 hefang_dw 的 Issue 模板新增统一入口配置并关闭空白 Issue
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `docs/AGENT_HANDOFF.md` | 修改 | 追加本轮 hooks 运行验收结论 |
+| `.github/ISSUE_TEMPLATE/config.yml` | 新增 | 新增 Issue 新建入口配置与常用文档链接 |
 
 **Copilot 接棒须知**：
-- 当前不再继续纠结 warning 卡片的 UI 细节，后续以日志命中、去重行为和真实触发结果作为主要验收依据。
-- Stop 与 PostToolUse 当前都已有真实触发证据；若后续再调 UI 展示，属于体验优化，不影响本轮通过。
+- Issue 模板体系现已包含 3 个模板和统一入口配置，适合单人项目下的结构化记录
+- 本轮未涉及 ETL 逻辑或业务口径，无需额外文档同步
 
 **未完成项**：
-- [ ] 若后续继续优化，仅在不破坏当前触发逻辑的前提下收敛 UI 文案或噪音
-
+- [ ] 当前模板体系已收口；如后续需要更强约束，可再升级为 GitHub Issue Forms
 
 
 ---
 
-### [2026-03-23 11:21] · GitHub Copilot · 收敛 Copilot hooks Python 化兼容层
+### [2026-03-24 13:18] · GitHub Copilot · 新增 GitHub Issue/PR 模板
 
-**摘要**：将 PostToolUse 切到 Python，并为旧的 pwsh/cmd 路径补齐兼容包装层
+**摘要**：为 hefang_dw 补充单人可追溯的 Issue 与 PR 模板
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `.github/hooks/post-edit-reminder-hefang.json` | 修改 | PostToolUse 与 Stop 主入口统一收敛到 Python |
-| `scripts/copilot_post_edit_reminder.py` | 新增 | 新增 Python 版 PostToolUse 提醒主实现 |
-| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 改为转发到 Python 的兼容包装层 |
-| `scripts/copilot_session_close_reminder.ps1` | 修改 | 改为转发到 Python 的兼容包装层 |
-| `scripts/copilot_session_close_reminder.cmd` | 新增 | 恢复 Stop 旧 cmd 路径兼容包装层 |
-| `CHANGELOG.md` | 修改 | 记录 PostToolUse Python 化与兼容层策略 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 更新当前 hooks 主实现状态 |
-| `docs/AGENT_LESSONS.md` | 修改 | 记录宿主配置滞后时需保留旧入口兼容层的经验 |
+| `.github/ISSUE_TEMPLATE/01_data_bug.md` | 新增 | 新增数据异常与 Bug 模板 |
+| `.github/ISSUE_TEMPLATE/02_change_request.md` | 新增 | 新增 ETL/SQL/文档变更申请模板 |
+| `.github/ISSUE_TEMPLATE/03_investigation_task.md` | 新增 | 新增待确认与调研任务模板 |
+| `.github/pull_request_template.md` | 新增 | 新增适配 hefang_dw 的 PR 模板 |
 
 **Copilot 接棒须知**：
-- 当前 Stop 与 PostToolUse 主实现均已切到 Python，但需在真实 Copilot UI 中再观察宿主噪音是否下降。
-- 若当前会话仍沿用旧 hook 配置，兼容包装层已可避免旧 cmd/ps1 路径缺失导致的额外报错。
+- 模板已按单人项目场景设计，仍保留 Issue->PR->handoff 的可追溯链路
+- 如后续启用 GitHub labels 或 Issue Forms，可在此基础上继续细化
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话中复测 Python 版 Stop warning 卡片是否更干净
-- [ ] 在真实 Copilot 会话中复测 PostToolUse warning 是否摆脱 pwsh NativeCommandError 风格噪音
-- [ ] 根据真实 UI 结果决定何时移除旧的 pwsh/cmd 兼容包装层
-
+- [ ] 如需进一步收口，可补 .github/ISSUE_TEMPLATE/config.yml 统一新建入口
 
 
 
 ---
 
-### [2026-03-23 11:08] · GitHub Copilot · 确认 Stop UI 可见并修正提示可读性
+### [2026-03-24 11:15] · GitHub Copilot · 清理用户级旧 DBHub MCP 配置
 
-**摘要**：真实 Copilot 会话已观察到 Warning from Stop hook，并将 Stop 提示文案收敛为 ASCII 以规避 stderr 中文乱码。
+**摘要**：移除用户级 mcp.json 中已废弃的 io.github.bytebase/dbhub 及其专属 inputs，避免与工作区级 DBHub 配置混淆
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `scripts/copilot_session_close_reminder.ps1` | 修改 | 将 Stop warning 文案和动作提示改为 ASCII，优先保证宿主 UI 可读性 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 补充 Stop warning 已在真实 UI 显示且中文 stderr 会乱码的结论 |
-| `CHANGELOG.md` | 修改 | 补充 v0.8.10 的真实 UI 观测与 ASCII 收敛说明 |
-| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 Stop hook UI 可显示但中文 stderr 可能乱码的经验 |
+| `d` | /tianhao/AppData/Roaming/Code/User/mcp.json | 修改:删除旧 io.github.bytebase/dbhub 与相关输入项 |
 
 **Copilot 接棒须知**：
-- 当前 Stop hook 已有真实 Copilot UI 证据，后续不必再验证‘会不会显示’，重点转到‘是否稳定显示’和‘文案是否可读’。
-- 只要继续沿用 PowerShell 非零 stderr 路径，用户侧提示建议优先保持 ASCII；中文说明放日志、会议纪要和经验台账。
-- 本轮仅做了最小可读性修正，未改变 Stop 提醒的触发窗口、去重策略和证据来源。
+- 已按用户要求保留仓库根 .mcp.json，供未来 OpenCode / Claude 兼容使用。
+- 当前 DBHub 与 Oracle 的实际主入口仍是工作区 .vscode/mcp.json；用户级 mcp.json 仅保留其他非数据库 MCP 配置。
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话中继续观察 Stop warning 的稳定性，而不只是单次可见
-- [ ] 根据后续复测结果决定是否也把 PostToolUse warning 文案收敛为 ASCII
-- [ ] 继续决定下一步优先做第二阶段 agent picker 验收，还是继续扩第三阶段提醒型 hooks
-
+- [ ] 建议重载 VS Code 窗口或新开聊天，使用户级 MCP 配置变更生效。
 
 
 
 
 ---
 
-### [2026-03-23 10:54] · GitHub Copilot · 新增 Stop 收口提醒试点
+### [2026-03-24 11:12] · GitHub Copilot · 收口 .mcp.json 旧引用
 
-**摘要**：新增基于 PostToolUse 日志信号的最小 Stop hook，并完成去重验证。
+**摘要**：不删除仓库根 .mcp.json，但将其统一标记为兼容/参考配置，并把 VS Code 会话主入口收口到 .vscode/mcp.json
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `.github/hooks/post-edit-reminder-hefang.json` | 修改 | 扩展 Stop 事件并接入 session close 脚本 |
-| `scripts/copilot_session_close_reminder.ps1` | 新增 | 基于最近 PostToolUse 命中日志输出非阻断收口提醒并做短时去重 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录第二个提醒型 hook 试点与当前边界 |
-| `CHANGELOG.md` | 修改 | 新增 v0.8.10 Stop 收口提醒试点记录 |
-| `docs/AGENT_LESSONS.md` | 修改 | 沉淀 Stop hook 应优先复用运行时日志信号的经验 |
+| `.claude/agents/data-query-agent.md` | 修改 | 将 .mcp.json 调整为兼容参考，不再当作当前会话主入口 |
+| `.claude/agents/db-inspector.md` | 修改 | 补充 VS Code 会话优先检查 .vscode/mcp.json 与用户级 mcp.json |
+| `.claude/skills/data-query/SKILL.md` | 修改 | 更新 MCP 不可用时的排查入口 |
+| `docs/ARCHITECTURE.md` | 修改 | 将 .mcp.json 标记为兼容配置 |
+| `docs/RUNBOOK.md` | 修改 | 明确 .vscode/mcp.json 是当前 VS Code/Copilot 主入口 |
 
 **Copilot 接棒须知**：
-- 当前第三阶段已同时具备 PostToolUse 和 Stop 两个提醒型 hook 试点，但仍以非阻断 warning 为主，不进入 ask/deny。
-- Stop 提醒当前依赖 logs/copilot_post_edit_reminder.log 作为最近编辑证据，避免被历史未提交改动误报带偏；若后续窗口或去重策略不合适，应直接调 scripts/copilot_session_close_reminder.ps1。
-- 本轮已手工验证：首次运行 Stop 脚本返回 warning，短时间重复运行同签名返回 continue。
+- 仓库根 .mcp.json 对当前 Copilot 会话冗余，但对 Claude/OpenCode 仍有兼容价值，因此本轮未删除。
+- 当前更值得清理的冗余项是用户级 mcp.json 里旧的 io.github.bytebase/dbhub 配置，但该文件在工作区外，本轮未自动修改。
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话里观察 Stop warning 是否稳定展示
-- [ ] 根据真实使用情况收敛最近窗口和去重时间
-- [ ] 继续决定下一步优先做第二阶段 agent picker 验收，还是继续扩第三阶段提醒型 hooks
-
+- [ ] 如确认后续只保留 VS Code/Copilot 路线且不再使用 Claude/OpenCode，可再单独删除仓库根 .mcp.json，并同步清理 CLAUDE.md、CHANGELOG.md 等历史引用。
 
 
 
@@ -189,26 +163,24 @@
 
 ---
 
-### [2026-03-23 10:45] · GitHub Copilot · 继续细分 PostToolUse docs 规则
+### [2026-03-24 11:06] · GitHub Copilot · 同步 MCP 可用性到各 agent
 
-**摘要**：将文档类提醒继续拆到数据字典类和协作文治理类，并验证六类文档样例均命中预期规则。
+**摘要**：将当前 MySQL/Oracle MCP 实测可用性、配置入口与 Oracle 工具稳定性边界同步到 AGENTS 与经验台帐
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 新增 data-dictionary 与 governance-docs 两类规则并收窄 runbook-docs 范围 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 docs 规则按后续动作差异继续细分 |
-| `CHANGELOG.md` | 修改 | 新增 v0.8.9 记录 docs 二次细分 |
+| `AGENTS.md` | 修改 | 补充 2026-03-24 已验证的 MCP 现状与会话级入口说明 |
+| `docs/AGENT_LESSONS.md` | 修改 | 记录 Oracle MCP 需接入工作区 .vscode/mcp.json 才会暴露为会话工具的经验 |
 
 **Copilot 接棒须知**：
-- 当前 docs 细分的意义是让 warning 直接对应后续动作：数据字典关注字段/契约/映射，治理文档关注 handoff/lesson/todo 一致性，运行文档关注命令与说明同步。
-- 本轮最小验证已在日志中确认 MYSQL数据字典、AGENT_HANDOFF、RUNBOOK、README、会议纪要和普通 docs 分别命中 data-dictionary、governance-docs、runbook-docs、readme、meeting-minutes、doc。
+- 当前会话已验证：MySQL 走 DBHub 可执行结构查询与只读 SQL；Oracle 已可直接查询 BOSNDS3。
+- Oracle 专用工具中 mcp_oracle_reqd_query 最稳定，mcp_oracle_list_tables 与 mcp_oracle_describe_table 仍应视为不稳定接口。
+- 后续如 agent 看不到新 MCP 工具，优先检查 .vscode/mcp.json，并重载窗口后新开聊天。
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话中分别编辑数据字典类和协作文治理类文档，观察新的 warning 分类是否稳定显示
-- [ ] 若后续还要继续细分，只在某一类文件具有明确不同收口动作时再新增规则，避免为分类而分类
-
+- [ ] 如后续继续固化文档，可考虑把同样的 MCP 现状同步到 docs/RUNBOOK.md。
 
 
 
@@ -217,25 +189,50 @@
 
 ---
 
-### [2026-03-23 10:24] · GitHub Copilot · 细分 PostToolUse docs 提醒规则
+### [2026-03-24 10:41] · GitHub Copilot · 修复 Oracle MCP 挂载路径
 
-**摘要**：将文档类 PostToolUse 提醒拆为会议纪要类、运行文档类、README 类和兜底 docs 类，并完成最小命中验证。
+**摘要**：将 Oracle MCP 从仓库根 .mcp.json 正式接入工作区 .vscode/mcp.json，并新增启动脚本读取本机 Oracle 环境变量
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 新增 meeting-minutes、runbook-docs、readme 三类 docs 规则并修正匹配正则 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 docs 细粒度规则扩展与当前阶段状态 |
-| `CHANGELOG.md` | 修改 | 新增 v0.8.8 记录 docs 细粒度规则扩展 |
+| `.vscode/mcp.json` | 修改 | 新增 oracle MCP server 到工作区级 VS Code 配置 |
+| `.vscode/start_oracle_mcp.ps1` | 新增 | 读取 ORACLE_CONNECTION_STRING 并启动 mcp-server-oracle |
 
 **Copilot 接棒须知**：
-- 当前 docs 类提醒已不再统一落到 doc；后续若继续细分，可优先考虑数据字典类与协作文档类，而不是继续增加过多低收益分支。
-- 本轮最小验证已在日志中确认四类输入分别命中 meeting-minutes、runbook-docs、readme 和 doc；若下一步做真实 UI 复测，优先改这四类文件观察 warning 展示。
+- 根因是当前会话的 MCP 工具注册只看工作区 .vscode/mcp.json 和用户级 mcp.json，不会自动把仓库根 .mcp.json 暴露为 Copilot 工具。
+- 已验证 Oracle 查询链路本身可用，BOSNDS3 表清单可通过仓库只读工具成功查出 2704 张表。
+- 新的 Oracle MCP 启动脚本已消除 powershell.exe 的编码解析问题。
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话中分别编辑会议纪要、RUNBOOK 和 README，观察不同 docs 子类 warning 是否稳定显示
-- [ ] 若后续继续扩规则，评估是否单独拆出数据字典类或交接治理类文档提醒
+- [ ] 重载 VS Code 窗口并新开聊天，让 oracle server 在会话工具面重新注册。
+
+
+
+
+
+
+
+---
+
+### [2026-03-24 10:23] · GitHub Copilot · 校正归档中的 dim_channel 旧结论
+
+**摘要**：为 AGENT_HANDOFF_archive 中早期 dim_channel 误判补充后续校正说明，避免历史归档干扰当前事实
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `docs/AGENT_HANDOFF_archive.md` | 修改 | 为早期 dim_channel 记录补充 2026-03-23 后续校正说明 |
+| `reports/docs_code_alignment.json` | 修改 | 刷新文档审计产物 |
+
+**Copilot 接棒须知**：
+- 本轮未改代码，也未改现行业务文档，只为归档旧结论补充后续校正，保留历史上下文同时避免检索误导。
+- 当前现行事实仍以 docs/业务逻辑与指标规范.md、docs/DATA_CONTRACTS.md、docs/ETL业务逻辑说明.md 为准。
+
+**未完成项**：
+- [ ] 当前收口已完成；若继续，可再统一检查 archive 中其他历史业务口径是否需要类似后续校正标记
 
 
 
@@ -246,26 +243,22 @@
 
 ---
 
-### [2026-03-23 10:19] · GitHub Copilot · 调整 PostToolUse warning 返回策略
+### [2026-03-24 10:16] · GitHub Copilot · 修正 DBHub MySQL host
 
-**摘要**：将提醒型 hook 从 systemMessage 成功返回切换为非阻断 warning 退出码，并同步沉淀 UI 展示排障结论。
+**摘要**：将工作区 DBHub DSN 从 localhost 改为 127.0.0.1，并验证 MySQL 与 DBHub 均可成功连接
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 命中提醒时改为 stderr 文案加退出码 1，未命中仍返回 continue JSON |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 systemMessage 与稳定 UI warning 的边界，并更新第三阶段当前状态 |
-| `CHANGELOG.md` | 修改 | 新增 v0.8.7 记录 warning 返回策略调整 |
-| `docs/AGENT_LESSONS.md` | 修改 | 补充 PostToolUse warning 展示排障经验 |
+| `.vscode/mcp.json` | 修改 | 将 DBHub MySQL DSN 的 host 从 localhost 改为 127.0.0.1 |
 
 **Copilot 接棒须知**：
-- 当前 hook 已不再把 systemMessage 作为 UI warning 的主要实现路径；若后续继续做提醒型 hooks，优先区分上下文注入与用户侧 warning 两类目标。
-- 本轮真实日志已出现 result=warning，说明宿主已接收到非阻断 warning 路径；下一步应让用户在真实聊天中复测卡片展示稳定性。
+- dbhub_ro 账号实际创建在 127.0.0.1 上，使用 localhost 会命中不同的 MySQL 用户 host 规则。
+- 已验证 mysql.exe 可登录 hefang_dw，DBHub 也可进入 MCP server running on stdio。
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话中再次编辑 docs 或 Copilot 自定义文件，观察 Warning from Post-ToolUse hook 是否比之前更稳定显示
-- [ ] 若 UI 仍不稳定，继续查 GitHub Copilot Chat Hooks 输出面板与版本差异，确认是否属于宿主预览行为限制
+- [ ] 在 VS Code 中重载窗口或重开聊天，让更新后的工作区级 mcp.json 重新注册。
 
 
 
@@ -277,26 +270,22 @@
 
 ---
 
-### [2026-03-23 09:55] · GitHub Copilot · 扩展 PostToolUse 提醒粒度
+### [2026-03-24 10:12] · GitHub Copilot · 清理 DBHub 启动日志噪声
 
-**摘要**：继续推进第三阶段，扩展 `PostToolUse` 提醒分类，新增 Copilot 自定义能力文件的收口提醒，并明确日志优先于 UI warning。
+**摘要**：抑制 PowerShell 对 npx stderr 的 NativeCommandError 包装，保留真实 MySQL 1045 错误
 
 **变更文件**：
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `scripts/copilot_post_edit_reminder.ps1` | 修改 | 扩展提醒规则，新增 Copilot 自定义能力文件场景，并细化 ETL / SQL / docs 提示文本 |
-| `docs/misc/superpowers内化会议纪要.md` | 修改 | 记录 `PostToolUse` 第一轮扩展范围，并明确日志为执行真值 |
-| `CHANGELOG.md` | 修改 | 记录 v0.8.6 PostToolUse 提醒粒度扩展 |
+| `.vscode/start_dbhub.ps1` | 修改 | 关闭原生命令 stderr 到 PowerShell ErrorRecord 的包装 |
 
 **Copilot 接棒须知**：
-- 当前第三阶段已经证明 `PostToolUse` hook 能在真实宿主里运行；后续扩展仍应优先选择“可日志验证”的提醒型逻辑，不把 UI warning 是否显示当成唯一验收标准。
-- 下一步若继续推进，优先考虑 `Stop` 收口提醒试点，而不是直接进入 `PreToolUse` 阻断型逻辑。
+- 当前 DBHub 启动链路正常，剩余阻塞点仅为 MySQL 账号 dbhub_ro 在 localhost 上认证失败。
+- 已用 mysql.exe 与 DBHub 两条链路复现同一 1045 错误，问题不在 MCP。
 
 **未完成项**：
-- [ ] 在真实 Copilot 会话中验证 Copilot 自定义能力文件修改时是否会命中新的 `copilot-customization` 提醒
-- [ ] 继续决定第三阶段下一步是扩 `PostToolUse` 细粒度规则，还是新增 `Stop` 收口提醒
-- [ ] 视实际误报情况继续收敛正则匹配和提示文案
+- [ ] 修正 dbhub_ro 密码，或在 MySQL 中重新创建并授权该账号后再重载 VS Code。
 
 
 

@@ -33,6 +33,120 @@ python scripts/log_agent_lesson.py \
 
 ## 经验记录
 
+### [2026-03-24 10:55] · task · mcp/path
+
+**触发场景**：仓库根 `.mcp.json` 已配置 Oracle，但当前 Copilot 会话里始终拿不到 Oracle MCP 工具
+
+**错误假设**：默认认为只要仓库根 `.mcp.json` 存在 `oracle` server，当前 VS Code / Copilot 会话就会自动暴露 Oracle MCP 工具
+
+**修正结论**：当前项目里，Copilot 会话实际注册 MCP 工具时优先看工作区 `.vscode/mcp.json` 与用户级 `mcp.json`；仓库根 `.mcp.json` 不能保证直接暴露为会话工具。2026-03-24 将 Oracle 接入工作区 `.vscode/mcp.json` 后，当前会话已可直接使用 Oracle 查询接口；其中 `mcp_oracle_reqd_query` 稳定可用，而 `mcp_oracle_list_tables` / `mcp_oracle_describe_table` 可能返回空或识别失败。
+
+**证据**：
+- .vscode/mcp.json
+- .vscode/start_oracle_mcp.ps1
+- AGENTS.md
+
+**预防动作**：以后排查“某个 MCP server 配了但会话里看不到工具”时，先确认 VS Code 实际生效的是工作区 `.vscode/mcp.json` 还是用户级 `mcp.json`，再判断是否需要重载窗口、新开聊天，或回退到只读 SQL 查询。
+
+---
+
+### [2026-03-24 09:50] · task · mcp/path
+
+**触发场景**：VS Code 中 io.github.bytebase/dbhub 长时间等待 initialize 后退出码 1
+
+**错误假设**：先把问题当成 DSN 或用户级 mcp.json 参数填写错误
+
+**修正结论**：在 Windows + Node 24.14.0 环境下，@bytebase/dbhub 安装阶段会因 better-sqlite3 原生依赖失败而直接退出；切到本地 Node 22 后可正常启动 MCP server
+
+**证据**：
+- .vscode/start_dbhub.ps1; .vscode/mcp.json; docs/AGENT_HANDOFF.md
+
+**预防动作**：以后排查 DBHub 启动失败时，先用 npx -p @bytebase/dbhub dbhub --help 或本地包装脚本验证运行时兼容性，再检查 DSN/inputs。
+
+---
+
+### [2026-03-23 17:46] · task · field-mapping
+
+**触发场景**：dim_channel 自动化测试误判缺少 DS001
+
+**错误假设**：将 O2O_RETAIL_CHANNEL.WING_CODE 直接假设成 DS001 这类店仓编码，并据此在测试中硬编码检查 WING_CODE='DS001'
+
+**修正结论**：dim_channel.WING_CODE 应按 Oracle O2O_RETAIL_CHANNEL 原值理解；2026-03-23 实查 Oracle 与 MySQL 均为 87 条且 WING_CODE 全部非空，但不存在 DS001 这一硬编码值
+
+**证据**：
+- etl_dim_channel.py#L27
+- test_etl_automation.py#L193
+- docs/数据结构与映射手册.md#L196
+
+**预防动作**：涉及字段语义时，先对照现网源表样本与目标表实查结果，再决定测试断言，不要把业务侧 C_STORE.CODE 规则直接外推到其他表字段
+
+---
+
+### [2026-03-23 17:37] · task · business-rule
+
+**触发场景**：Oracle/MySQL 销售对账差异 7%+
+
+**错误假设**：dws_sales 仅按单据头 TOT_AMT_ACTUAL 正负归类，遗漏 TOT_AMT_ACTUAL=0 时需按行级 QTY 正负兜底的标准口径；测试记录数也未使用与 Oracle 相同的渠道过滤
+
+**修正结论**：dws_sales 标准口径应在 TOT_AMT_ACTUAL=0 时按行级 QTY 正负兜底，并确保 Oracle/MySQL 对账使用完全一致的过滤条件与 0.5% 误差阈值
+
+**证据**：
+- etl_dws_sales.py#L50
+- etl_dws_sales.py#L55
+- test_etl_automation.py#L268
+- test_etl_automation.py#L309
+
+**预防动作**：遇到销售口径对账异常时，先回查仓库内标准 SQL 口径文档，再检查测试过滤条件是否与 Oracle SQL 完全一致
+
+---
+
+### [2026-03-23 17:06] · task · incremental-logic
+
+**触发场景**：2026-03-23 主链重跑时 dws_inventory 与 ads_health 出现 1213/1205 锁冲突
+
+**错误假设**：将按日覆盖的 delete+insert 拆成跨事务步骤，且在上游失败后仍继续驱动下游 ADS 计算
+
+**修正结论**：dws_inventory 和 ads_health 的当日覆盖必须使用命名锁串行化；ads_health 的 delete+insert 必须放在同一事务内；run_etl 在 dws_sales 或 dws_inventory 未成功时应跳过 ads_health
+
+**证据**：
+- etl_dws_inventory.py#L121
+- etl_ads_health.py#L313
+- run_etl.py#L472
+
+**预防动作**：以后凡是日快照覆盖型 ETL，先检查是否需要命名锁、单事务覆盖和下游依赖短路，避免重跑时删空当天数据
+
+---
+
+### [2026-03-23 16:27] · task · field-mapping
+
+**触发场景**：将 dws_inventory 从 Oracle 切到 ODS 时核对 qty_valid 口径
+
+**错误假设**：默认把 ods_fa_storage.qtyvalid 当作 dws_inventory.qty_valid 的来源
+
+**修正结论**：当前库存快照仍应沿用 qty 作为 qty_valid 口径，因为 Oracle FA_STORAGE.QTYVALID 在现网未维护、通常为 0；切到 ODS 后也不能直接改口径
+
+**证据**：
+- docs/ETL业务逻辑说明.md:398-406; docs/数据结构与映射手册.md:519-529; etl_dws_inventory.py:31-38
+
+**预防动作**：以后改库存链前先核对字段是否为未维护字段；ODS 化只迁移链路，不默认改变业务口径
+
+---
+
+### [2026-03-23 16:10] · task · business-rule
+
+**触发场景**：ODS 刚接入主自动化链、但 DWS 尚未切换到消费 ODS 时进行文档同步
+
+**错误假设**：把主链接入 ODS 误写成 ODS 已经与 DWS/ADS 全链打通
+
+**修正结论**：文档只能同步已实现层级：当前仅确认 run_etl 已纳入 ods_sync；dws_sales 和 dws_inventory 仍直连 Oracle，需待第二阶段代码落地后再改来源描述
+
+**证据**：
+- run_etl.py:47-56; run_etl.py:381-391; docs/ARCHITECTURE.md; docs/ETL业务逻辑说明.md
+
+**预防动作**：以后先区分调度接入与事实源切换两个阶段，文档同步按已实现阶段最小更新
+
+---
+
 ### [2026-03-23 11:50] · task · copilot-agent
 
 **触发场景**：继续推进第二阶段 custom agents 时，需要提高 agent picker 与自然语言发现的稳定性

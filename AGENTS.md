@@ -50,6 +50,14 @@
 - 运行手册：`docs/RUNBOOK.md`
 - 架构地图：`docs/ARCHITECTURE.md`
 
+## MCP 现状
+
+- 2026-03-24 已验证：当前 VS Code / Copilot 会话实际注册 MCP 工具时，优先看工作区 `.vscode/mcp.json` 与用户级 `mcp.json`，不会自动把仓库根 `.mcp.json` 暴露为会话工具。
+- MySQL 已通过工作区 `.vscode/mcp.json` 中的 DBHub 配置打通，当前会话可直接执行 DBHub 结构查询与只读 SQL。
+- Oracle 已通过工作区 `.vscode/mcp.json` + `.vscode/start_oracle_mcp.ps1` 打通；连接串来自本机环境变量 `ORACLE_CONNECTION_STRING`，默认 schema 为 `BOSNDS3`。
+- Oracle MCP 当前以 `mcp_oracle_reqd_query` 最稳定；`mcp_oracle_list_tables` 可能返回空，`mcp_oracle_describe_table` 对部分表可能识别失败，此时回退到 `ALL_TABLES` / `ALL_TAB_COLUMNS` 只读查询。
+- 若新加 MCP server 后当前会话仍看不到对应工具，优先重载 VS Code 并新开聊天，而不是继续沿用旧会话。
+
 ## 外部示例仓库
 
 - 外部示例仓库统一存放在 `example_repos/`

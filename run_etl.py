@@ -49,6 +49,7 @@ STEP_ORDER = [
     'dim_sku',
     'dim_store',
     'dim_channel',
+    'ods_sync',
     'dws_sales',
     'dws_inventory',
     'dabo_ready',
@@ -328,7 +329,7 @@ def run_all():
         }
     
     # 1. 商品维度
-    logger.info("\n>>> [1/8] Syncing product dimensions...")
+    logger.info("\n>>> [1/9] Syncing product dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_product import run as run_dim_product
@@ -340,7 +341,7 @@ def run_all():
         logger.error(f"dim_product failed: {error_msg}")
     
     # 2. SKU维度
-    logger.info("\n>>> [2/8] Syncing sku dimensions...")
+    logger.info("\n>>> [2/9] Syncing sku dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_sku import run as run_dim_sku
@@ -352,7 +353,7 @@ def run_all():
         logger.error(f"dim_sku failed: {error_msg}")
 
     # 3. 店仓维度
-    logger.info("\n>>> [3/8] Syncing store dimensions...")
+    logger.info("\n>>> [3/9] Syncing store dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_store import run as run_dim_store
@@ -364,7 +365,7 @@ def run_all():
         logger.error(f"dim_store failed: {error_msg}")
     
     # 4. 渠道维度
-    logger.info("\n>>> [4/8] Syncing channel dimensions...")
+    logger.info("\n>>> [4/9] Syncing channel dimensions...")
     step_start = datetime.now()
     try:
         from etl_dim_channel import run as run_dim_channel
@@ -375,8 +376,20 @@ def run_all():
         update_step('dim_channel', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dim_channel failed: {error_msg}")
 
-    # 5. 销售数据
-    logger.info("\n>>> [5/8] Syncing sales data...")
+    # 5. ODS 同步
+    logger.info("\n>>> [5/9] Syncing ODS data...")
+    step_start = datetime.now()
+    try:
+        from run_ods import run as run_ods_sync
+        run_ods_sync(mode='incremental', backfill_days=7, window_days=None, run_qc=True, qc_days=7)
+        update_step('ods_sync', 'SUCCESS', '增量同步与质量校验完成', step_start)
+    except Exception as e:
+        error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+        update_step('ods_sync', 'FAILED', _extract_error_summary(error_msg), step_start)
+        logger.error(f"ods_sync failed: {error_msg}")
+
+    # 6. 销售数据
+    logger.info("\n>>> [6/9] Syncing sales data...")
     step_start = datetime.now()
     try:
         from etl_dws_sales import run as run_dws_sales, backfill as backfill_dws_sales
@@ -415,8 +428,8 @@ def run_all():
         update_step('dws_sales', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_sales failed: {error_msg}")
     
-    # 6. 库存数据
-    logger.info("\n>>> [6/8] Syncing inventory data...")
+    # 7. 库存数据
+    logger.info("\n>>> [7/9] Syncing inventory data...")
     step_start = datetime.now()
     try:
         from etl_dws_inventory import run as run_dws_inventory
@@ -427,8 +440,8 @@ def run_all():
         update_step('dws_inventory', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_inventory failed: {error_msg}")
 
-    # 7. 达播数据就绪检查（外部项目产出）
-    logger.info("\n>>> [7/8] Checking dabo data readiness...")
+    # 8. 达播数据就绪检查（外部项目产出）
+    logger.info("\n>>> [8/9] Checking dabo data readiness...")
     dabo_ready = False
     step_start = datetime.now()
     try:
@@ -459,23 +472,34 @@ def run_all():
         update_step('dabo_ready', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dabo_ready check failed: {error_msg}")
     
-    # 8. 库存健康度计算
-    logger.info("\n>>> [8/8] Calculating inventory health...")
+    # 9. 库存健康度计算
+    logger.info("\n>>> [9/9] Calculating inventory health...")
     step_start = datetime.now()
-    try:
-        from etl_ads_health import run as run_ads_health, backfill_dabo_fields
-        run_ads_health()
+    upstream_blockers = []
+    if step_reports.get('dws_sales', {}).get('status') != 'SUCCESS':
+        upstream_blockers.append('dws_sales')
+    if step_reports.get('dws_inventory', {}).get('status') != 'SUCCESS':
+        upstream_blockers.append('dws_inventory')
 
-        # 达播数据就绪时，回填当日达播/自然字段（避免外部项目时序影响）
-        if dabo_ready:
-            backfill_dabo_fields()
-            update_step('ads_health', 'SUCCESS', '健康度计算完成，已回填当日达播字段', step_start)
-        else:
-            update_step('ads_health', 'SUCCESS', '健康度计算完成，未回填达播字段', step_start)
-    except Exception as e:
-        error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
-        update_step('ads_health', 'FAILED', _extract_error_summary(error_msg), step_start)
-        logger.error(f"ads_health failed: {error_msg}")
+    if upstream_blockers:
+        detail = f"因上游未成功跳过: {', '.join(upstream_blockers)}"
+        update_step('ads_health', 'WARNING', detail, step_start)
+        logger.warning(detail)
+    else:
+        try:
+            from etl_ads_health import run as run_ads_health, backfill_dabo_fields
+            run_ads_health()
+
+            # 达播数据就绪时，回填当日达播/自然字段（避免外部项目时序影响）
+            if dabo_ready:
+                backfill_dabo_fields()
+                update_step('ads_health', 'SUCCESS', '健康度计算完成，已回填当日达播字段', step_start)
+            else:
+                update_step('ads_health', 'SUCCESS', '健康度计算完成，未回填达播字段', step_start)
+        except Exception as e:
+            error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+            update_step('ads_health', 'FAILED', _extract_error_summary(error_msg), step_start)
+            logger.error(f"ads_health failed: {error_msg}")
     
     # 汇总结果
     end_time = datetime.now()

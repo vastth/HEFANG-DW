@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 何方珠宝 - 销售数据ETL
-从Oracle M_RETAIL/M_RETAILITEM同步到MySQL dws_sales_daily
+从MySQL ODS ods_m_retail/ods_m_retailitem 聚合到 dws_sales_daily
 策略：增量同步（按日期）
 """
 
-import oracledb
 import pandas as pd
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 import logging
 import sys
+import time
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from config import MYSQL_CONN_STR
 
 # 配置日志
 logging.basicConfig(
@@ -22,59 +22,57 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def extract_from_oracle(start_date, end_date):
-    """从Oracle抽取销售数据"""
-    
-    sql = f"""
+RETRYABLE_MYSQL_LOCK_KEYWORDS = (
+    '1213',
+    '1205',
+    'deadlock found',
+    'lock wait timeout exceeded',
+    '未能获取命名锁',
+)
+
+
+def _is_retryable_mysql_lock_error(exc):
+    message = str(exc).lower()
+    return any(keyword in message for keyword in RETRYABLE_MYSQL_LOCK_KEYWORDS)
+
+
+def extract_from_ods(start_date, end_date):
+    """从MySQL ODS 聚合销售数据"""
+
+    sql = text("""
     SELECT
-        r.BILLDATE AS date_id,
-        r.C_STORE_ID AS store_id,
-        s.CODE AS store_code,
-        NVL(s.IS_ALLO2OSTORAGE, 'N') AS is_cloud_store,
-        ri.M_PRODUCT_ID AS product_id,
-        ri.M_PRODUCTALIAS_ID AS m_productalias_id,
-        -- 销售数据（正单）
-        SUM(CASE WHEN r.TOT_AMT_ACTUAL > 0 THEN ri.QTY ELSE 0 END) AS sales_qty,
-        SUM(CASE WHEN r.TOT_AMT_ACTUAL > 0 THEN ri.TOT_AMT_ACTUAL ELSE 0 END) AS sales_amount,
-        SUM(CASE WHEN r.TOT_AMT_ACTUAL > 0 THEN ri.TOT_AMT_LIST ELSE 0 END) AS sales_amount_list,
-        -- 退货数据（负单）
-        SUM(CASE WHEN r.TOT_AMT_ACTUAL < 0 THEN ABS(ri.QTY) ELSE 0 END) AS return_qty,
-        SUM(CASE WHEN r.TOT_AMT_ACTUAL < 0 THEN ABS(ri.TOT_AMT_ACTUAL) ELSE 0 END) AS return_amount,
-        -- 订单数
-        COUNT(DISTINCT CASE WHEN r.TOT_AMT_ACTUAL > 0 THEN r.ID END) AS order_count
-    FROM M_RETAILITEM ri
-    LEFT JOIN M_RETAIL r ON ri.M_RETAIL_ID = r.ID
-    LEFT JOIN C_STORE s ON r.C_STORE_ID = s.ID
-    LEFT JOIN M_PRODUCT p ON ri.M_PRODUCT_ID = p.ID
-    WHERE r.ISACTIVE = 'Y' 
-        AND r.STATUS = 2
-        AND r.BILLDATE >= {start_date}
-        AND r.BILLDATE <= {end_date}
-        AND ri.M_PRODUCTALIAS_ID IS NOT NULL
-    GROUP BY r.BILLDATE, r.C_STORE_ID, s.CODE, NVL(s.IS_ALLO2OSTORAGE, 'N'), ri.M_PRODUCT_ID, ri.M_PRODUCTALIAS_ID
-    """
-    
-    logger.info("连接Oracle数据库...")
-    conn = oracledb.connect(
-        user=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        dsn=ORACLE_DSN
-    )
-    
+        r.billdate AS date_id,
+        r.c_store_id AS store_id,
+        COALESCE(s.store_code, '') AS store_code,
+        COALESCE(s.is_cloud_store, 'N') AS is_cloud_store,
+        ri.m_product_id AS product_id,
+        ri.m_productalias_id AS m_productalias_id,
+        SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.qty ELSE 0 END) AS sales_qty,
+        SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.tot_amt_actual ELSE 0 END) AS sales_amount,
+        SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.tot_amt_list ELSE 0 END) AS sales_amount_list,
+        SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.qty) ELSE 0 END) AS return_qty,
+        SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.tot_amt_actual) ELSE 0 END) AS return_amount,
+        COUNT(DISTINCT CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN r.id END) AS order_count
+    FROM ods_m_retailitem ri
+    INNER JOIN ods_m_retail r ON ri.m_retail_id = r.id
+    LEFT JOIN dim_store s ON r.c_store_id = s.store_id
+    WHERE r.isactive = 'Y'
+      AND r.status = 2
+      AND r.billdate >= :start_date
+      AND r.billdate <= :end_date
+      AND ri.m_productalias_id IS NOT NULL
+    GROUP BY r.billdate, r.c_store_id, COALESCE(s.store_code, ''), COALESCE(s.is_cloud_store, 'N'), ri.m_product_id, ri.m_productalias_id
+    """)
+
+    logger.info("连接MySQL数据库，聚合 ODS 销售数据...")
+    engine = create_engine(MYSQL_CONN_STR)
+
     logger.info(f"执行SQL查询（日期范围：{start_date} - {end_date}）...")
-    cursor = conn.cursor()
-    cursor.execute(sql)
-    description = cursor.description or []
-    columns = []
-    for column in description:
-        column_name = column[0]
-        columns.append(column_name.lower() if isinstance(column_name, str) else str(column_name).lower())
-    data = cursor.fetchall()
-    df = pd.DataFrame(data, columns=columns)
-    
-    cursor.close()
-    conn.close()
-    
+    try:
+        df = pd.read_sql(sql, engine, params={"start_date": start_date, "end_date": end_date})
+    finally:
+        engine.dispose()
+
     logger.info(f"抽取完成，共 {len(df)} 条记录")
     return df
 
@@ -96,7 +94,8 @@ def transform(df):
         df['m_productalias_id'] = df['m_productalias_id'].astype('Int64')
     else:
         df['m_productalias_id'] = pd.Series([pd.NA] * len(df), dtype='Int64')
-    # store_code/is_cloud_store 来自 C_STORE
+
+    # store_code/is_cloud_store 现由 dim_store 回补
     if 'store_code' in df.columns:
         df['store_code'] = df['store_code'].fillna('')
     else:
@@ -111,6 +110,10 @@ def transform(df):
                     'return_qty', 'return_amount', 'order_count']
     for col in numeric_cols:
         df[col] = df[col].fillna(0)
+
+    integer_cols = ['sales_qty', 'return_qty', 'order_count']
+    for col in integer_cols:
+        df[col] = df[col].round().astype('int64')
     
     # 添加ETL时间戳
     df['etl_time'] = datetime.now()
@@ -128,23 +131,46 @@ def load_to_mysql(df, start_date, end_date):
     
     logger.info("连接MySQL数据库...")
     engine = create_engine(MYSQL_CONN_STR)
+    lock_name = 'hefang_dw:dws_sales_daily'
+    max_attempts = 3
     
     try:
-        with engine.begin() as conn:
-            # 先删除该日期范围的旧数据
-            logger.info(f"删除旧数据（{start_date} - {end_date}）...")
-            conn.execute(text(f"DELETE FROM dws_sales_daily WHERE date_id >= {start_date} AND date_id <= {end_date}"))
-            
-            logger.info("写入新数据...")
-            df.to_sql(
-                name='dws_sales_daily',
-                con=conn,
-                if_exists='append',
-                index=False,
-                chunksize=5000
-            )
-        
-        logger.info(f"写入完成，共 {len(df)} 条记录")
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(
+                    f"删除旧数据（{start_date} - {end_date}）并写入新数据（单事务，第 {attempt}/{max_attempts} 次）..."
+                )
+                with engine.begin() as conn:
+                    got_lock = conn.execute(
+                        text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
+                        {"lock_name": lock_name, "timeout_seconds": 30},
+                    ).scalar()
+                    if got_lock != 1:
+                        raise TimeoutError(f"未能获取命名锁: {lock_name}")
+
+                    conn.execute(
+                        text("DELETE FROM dws_sales_daily WHERE date_id >= :start_date AND date_id <= :end_date"),
+                        {"start_date": start_date, "end_date": end_date},
+                    )
+
+                    df.to_sql(
+                        name='dws_sales_daily',
+                        con=conn,
+                        if_exists='append',
+                        index=False,
+                        chunksize=5000,
+                    )
+
+                logger.info(f"写入完成，共 {len(df)} 条记录")
+                break
+            except Exception as exc:
+                if attempt >= max_attempts or not _is_retryable_mysql_lock_error(exc):
+                    raise
+                wait_seconds = attempt * 5
+                logger.warning(
+                    f"检测到可重试锁冲突（第 {attempt}/{max_attempts} 次）：{exc}；{wait_seconds} 秒后重试..."
+                )
+                time.sleep(wait_seconds)
     finally:
         engine.dispose()
 
@@ -187,7 +213,7 @@ def run(days_back=1, include_today=False):
     
     try:
         # Extract
-        df = extract_from_oracle(start_date, end_date)
+        df = extract_from_ods(start_date, end_date)
         
         # Transform
         df = transform(df)
@@ -221,7 +247,7 @@ def backfill(start_date, end_date):
     logger.info("="*50)
     
     try:
-        df = extract_from_oracle(start_date, end_date)
+        df = extract_from_ods(start_date, end_date)
         df = transform(df)
         load_to_mysql(df, start_date, end_date)
         

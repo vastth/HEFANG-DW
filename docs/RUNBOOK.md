@@ -127,6 +127,9 @@ python -c "import etl_dws_inventory; etl_dws_inventory.run()"
 
 # 库存健康度重算
 python -c "import etl_ads_health; etl_ads_health.run()"
+
+# 若刚发生手工重跑或调度重叠，先等待前一轮完成再重算，避免锁冲突
+# dws_sales / dws_inventory / ads_health 现在都内置命名锁与死锁重试，但仍不建议并发重复触发
 ```
 
 ### 2.4 数据质检
@@ -234,7 +237,7 @@ MCP 推荐配置片段：
 ```
 
 说明：
-- 本仓库不提交 `.mcp.json`，上面的片段仅供本地参考。
+- 当前 VS Code / Copilot 会话优先读取工作区 `.vscode/mcp.json` 与用户级 `mcp.json`；仓库根 `.mcp.json` 更适合作为 Claude/OpenCode 的兼容或本地参考配置。
 - MCP 更适合交互式查数与结构探查；`tools/query_data.py` 适合作为稳定兜底和导出工具。
 - 快照脚本只输出结构信息，不读取业务数据值。
 
@@ -265,6 +268,8 @@ python scripts/log_agent_lesson.py --source user-feedback --category business-ru
 ```powershell
 # 完整自动化验收测试（需要数据库已有数据）
 python test_etl_automation.py
+
+# Oracle 对账重点：dws_inventory / dws_sales / ads_health 默认按 0.5% 误差阈值输出结果
 
 # 通过 pytest 运行
 pytest test_etl_automation.py -v
@@ -361,7 +366,17 @@ conn.close()
 
 # 3. 强制重算 ADS
 python -c "import etl_ads_health; etl_ads_health.run()"
+
+# 4. 如果日志出现 1213 / 1205，先确认是否有别的 ETL 会话仍在跑
+python -c "import pymysql, os; conn=pymysql.connect(host=os.getenv('MYSQL_HOST'), user=os.getenv('MYSQL_USER'), password=os.getenv('MYSQL_PASSWORD'), database=os.getenv('MYSQL_DB','hefang_dw')); c=conn.cursor(); c.execute('SHOW FULL PROCESSLIST'); [print(r) for r in c.fetchall()]; conn.close()"
 ```
+
+补充说明：
+- `etl_dws_inventory.py` 现已在写入 `dws_inventory_daily` 前申请命名锁，并对死锁/锁等待超时做最多 3 次退避重试。
+- `etl_dws_sales.py` 现已在覆盖写入 `dws_sales_daily` 前申请命名锁，并对死锁/锁等待超时做最多 3 次退避重试。
+- `etl_ads_health.py` 现已将“删除当天数据 + 插入新结果”放入同一事务；若插入失败，不会留下当天 ADS 被清空的中间态。
+- `run_etl.py` 现已在 `dws_sales` 或 `dws_inventory` 未成功时跳过 `ads_health`，避免下游继续放大异常。
+- `test_etl_automation.py` 现已对 `dws_inventory`、`dws_sales`、`ads_health` 输出 Oracle 对账百分比；2026-03-23 复测结果分别为 0.00%、0.39%/0.11%/0.07%、0.00%。
 
 ### 4.5 企业微信告警不通
 
@@ -448,6 +463,8 @@ python tools/check_ods_incremental.py
 
 | 版本 | 日期 | 变更内容 |
 |------|------|----------|
+| v1.7 | 2026-03-23 | 补充 dws_sales 命名锁重试与 Oracle 对账 0.5% 阈值说明 |
+| v1.6 | 2026-03-23 | 补充库存/ADS 命名锁重试、ADS 单事务覆盖与 1213/1205 排查说明 |
 | v1.5 | 2026-03-20 | 补充 hfsy 源端连接事实、临时环境变量约定与只读探查示例 |
 | v1.0 | 2026-03-18 | 初版运行手册 |
 | v1.1 | 2026-03-18 | 新增 MCP 与只读查数说明、结构快照与导出命令 |
