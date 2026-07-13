@@ -1,0 +1,417 @@
+{
+  "rows_text": "([federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk] + [federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_target_amt:qk])",
+  "cols_text": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[none:sales_date:qk]",
+  "dependency_fields": [
+    "当日实际",
+    "当日目标",
+    "销售日期"
+  ],
+  "table_style_spec": {
+    "attrs": {},
+    "children": [
+      {
+        "tag": "style-rule",
+        "attrs": {
+          "element": "axis"
+        },
+        "text": "",
+        "children": [
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "title",
+              "class": "0",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]",
+              "scope": "rows",
+              "value": "日销售额（元）"
+            },
+            "text": "",
+            "children": []
+          },
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "width",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]",
+              "value": "72"
+            },
+            "text": "",
+            "children": []
+          },
+          {
+            "tag": "encoding",
+            "attrs": {
+              "attr": "space",
+              "class": "0",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_target_amt:qk]",
+              "field-type": "quantitative",
+              "fold": "true",
+              "scope": "rows",
+              "synchronized": "true",
+              "type": "space"
+            },
+            "text": "",
+            "children": []
+          },
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "display",
+              "class": "0",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_target_amt:qk]",
+              "scope": "rows",
+              "value": "false"
+            },
+            "text": "",
+            "children": []
+          },
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "display",
+              "class": "0",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]",
+              "scope": "rows",
+              "value": "true"
+            },
+            "text": "",
+            "children": []
+          },
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "tick-color",
+              "value": "#00000000"
+            },
+            "text": "",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "replace_panes": true,
+  "pane_specs": [
+    {
+      "attrs": {
+        "selection-relaxation-option": "selection-relaxation-allow"
+      },
+      "child_specs": [
+        {
+          "tag": "view",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "breakdown",
+              "attrs": {
+                "value": "auto"
+              },
+              "text": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "mark",
+          "attrs": {
+            "class": "Automatic"
+          },
+          "text": "",
+          "children": []
+        },
+        {
+          "tag": "style",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "mark"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-line-pattern",
+                    "value": "solid"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "attrs": {
+        "id": "1",
+        "selection-relaxation-option": "selection-relaxation-allow",
+        "y-axis-name": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]"
+      },
+      "child_specs": [
+        {
+          "tag": "view",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "breakdown",
+              "attrs": {
+                "value": "auto"
+              },
+              "text": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "mark",
+          "attrs": {
+            "class": "Bar"
+          },
+          "text": "",
+          "children": []
+        },
+        {
+          "tag": "mark-sizing",
+          "attrs": {
+            "mark-sizing-setting": "marks-scaling-off"
+          },
+          "text": "",
+          "children": []
+        },
+        {
+          "tag": "customized-tooltip",
+          "attrs": {
+            "show-buttons": "false"
+          },
+          "text": "",
+          "children": [
+            {
+              "tag": "formatted-text",
+              "attrs": {},
+              "text": "",
+              "children": [
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "fontcolor": "#787878"
+                  },
+                  "text": "销售日期:",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "bold": "true"
+                  },
+                  "text": "<[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[none:sales_date:qk]>",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {},
+                  "text": "Æ",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "fontcolor": "#787878"
+                  },
+                  "text": "当日实际:",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "bold": "true"
+                  },
+                  "text": "<[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]>",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "style",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "datalabel"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "font-size",
+                    "value": "9"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "font-weight",
+                    "value": "bold"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "mark"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "color",
+                    "value": "#2f5d94"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "size",
+                    "value": "0.95"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-labels-show",
+                    "value": "true"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-labels-cull",
+                    "value": "true"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-line-pattern",
+                    "value": "solid"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "trendline"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "stroke-size",
+                    "value": "0"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "line-visibility",
+                    "value": "off"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "attrs": {
+        "id": "3",
+        "selection-relaxation-option": "selection-relaxation-allow",
+        "y-axis-name": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_target_amt:qk]"
+      },
+      "child_specs": [
+        {
+          "tag": "view",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "breakdown",
+              "attrs": {
+                "value": "auto"
+              },
+              "text": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "mark",
+          "attrs": {
+            "class": "Automatic"
+          },
+          "text": "",
+          "children": []
+        },
+        {
+          "tag": "style",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "mark"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-line-pattern",
+                    "value": "solid"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

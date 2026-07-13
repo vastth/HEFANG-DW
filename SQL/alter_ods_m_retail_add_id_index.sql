@@ -1,0 +1,1 @@
+CREATE INDEX idx_ods_m_retail_id ON ods_m_retail (id);

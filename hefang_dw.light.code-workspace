@@ -1,0 +1,106 @@
+{
+  "folders": [
+    {
+      "name": "hefang_dw",
+      "path": "."
+    },
+    {
+      "path": "D:/tianhao/Documents/我的 Tableau 存储库/工作簿"
+    },
+    {
+      "path": "\\\\192.168.0.151\\hefang总部\\14-数据中台\\销售部\\目标配置表"
+    },
+    {
+      "path": "../database_table_export_jobs"
+    },
+    {
+      "path": "../../Documents/Navicat/Oracle/Servers/8.134.9.203/BOSNDS3"
+    }
+  ],
+  "settings": {
+    "workbench.startupEditor": "none",
+    "files.watcherExclude": {
+      "**/.git/objects/**": true,
+      "**/.git/subtree-cache/**": true,
+      "**/.git/index.lock": true,
+      "**/__pycache__/**": true,
+      "**/.pytest_cache/**": true,
+      "**/.mypy_cache/**": true,
+      "**/.ruff_cache/**": true,
+      "**/.ipynb_checkpoints/**": true,
+      "**/.conda/**": true,
+      "**/.tmp/**": true,
+      "**/.runtime/**": true,
+      "**/.opencode/node_modules/**": true,
+      "**/node_modules/**": true,
+      "**/logs/**": true,
+      "**/data/**": true,
+      "**/reports/**": true,
+      "**/example_repos/**": true
+    },
+    "search.exclude": {
+      "**/.git": true,
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.mypy_cache": true,
+      "**/.ruff_cache": true,
+      "**/.ipynb_checkpoints": true,
+      "**/.conda": true,
+      "**/.tmp": true,
+      "**/.runtime": true,
+      "**/.opencode/node_modules": true,
+      "**/node_modules": true,
+      "**/logs": true,
+      "**/data": true,
+      "**/reports": true,
+      "**/example_repos": true,
+      "**/temp_*_hits.txt": true,
+      "**/temp_transcript_*.txt": true
+    },
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.mypy_cache": true,
+      "**/.ruff_cache": true,
+      "**/.ipynb_checkpoints": true,
+      "**/.conda": true,
+      "**/.tmp": true,
+      "**/.runtime": true,
+      "**/.opencode/node_modules": true,
+      "**/node_modules": true,
+      "**/temp_*_hits.txt": true,
+      "**/temp_transcript_*.txt": true
+    },
+    "python.analysis.exclude": [
+      "**/node_modules",
+      "**/__pycache__",
+      ".git",
+      "**/.conda/**",
+      "**/.tmp/**",
+      "**/.runtime/**",
+      "**/.opencode/**",
+      "**/example_repos/**",
+      "**/logs/**",
+      "**/data/**",
+      "**/reports/**",
+      "**/notebooks/**",
+      "**/.pytest_cache/**",
+      "**/.mypy_cache/**",
+      "**/.ruff_cache/**",
+      "**/.ipynb_checkpoints/**"
+    ],
+    "python.analysis.diagnosticMode": "openFilesOnly",
+    "python.analysis.indexing": false,
+    "git.openRepositoryInParentFolders": "never",
+    "git.untrackedChanges": "hidden",
+    "git.autorefresh": false,
+    "git.decorations.enabled": false,
+    "terminal.integrated.enablePersistentSessions": false,
+    "terminal.integrated.persistentSessionReviveProcess": "never",
+    "terminal.integrated.gpuAcceleration": "off",
+    "chat.agent.maxRequests": 20,
+    "github.copilot.nextEditSuggestions.eagerness": "auto",
+    "diffEditor.maxComputationTime": 10000,
+    "powershell.cwd": "hefang_dw"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "encodings": {
+    "label": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]"
+  },
+  "dependency_fields": [
+    "当日实际",
+    "销售日期"
+  ]
+}

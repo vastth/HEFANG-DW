@@ -9,13 +9,12 @@
 - Oracle保留字不能直接用作列别名
 """
 
-import oracledb
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from datetime import datetime
 import logging
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from db_connections import connect_oracle, create_mysql_engine
 
 # 配置日志
 logging.basicConfig(
@@ -44,11 +43,7 @@ def extract_from_oracle():
     """
 
     logger.info("连接Oracle数据库...")
-    conn = oracledb.connect(
-        user=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        dsn=ORACLE_DSN
-    )
+    conn = connect_oracle()
 
     logger.info("执行SQL查询...")
     cursor = conn.cursor()
@@ -98,7 +93,7 @@ def load_to_mysql(df):
         return
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     logger.info("清空目标表 dim_sku...")
     with engine.begin() as conn:

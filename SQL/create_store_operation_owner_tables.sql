@@ -1,0 +1,72 @@
+CREATE TABLE IF NOT EXISTS cfg_store_operation_owner_snapshot (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  snapshot_date DATE NOT NULL COMMENT '快照日期',
+  entity_type VARCHAR(20) NOT NULL COMMENT '经营实体类型：STORE/SUBJECT',
+  entity_id BIGINT NULL COMMENT '经营实体ID；普通门店=store_id，共同考核主体=挂靠主店store_id',
+  entity_code VARCHAR(64) NOT NULL COMMENT '经营实体编码；普通门店=store_code，共同考核主体=subject_code',
+  entity_name VARCHAR(255) NOT NULL COMMENT '经营实体名称',
+  owner_name VARCHAR(100) NULL COMMENT '负责人名称，可为空',
+  remark VARCHAR(500) NULL COMMENT '备注',
+  source_file_name VARCHAR(255) NULL COMMENT '来源文件名',
+  source_file_md5 CHAR(32) NULL COMMENT '来源文件MD5',
+  created_by VARCHAR(64) NULL COMMENT '创建人',
+  updated_by VARCHAR(64) NULL COMMENT '更新人',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_cfg_store_operation_owner_snapshot (snapshot_date, entity_type, entity_code),
+  KEY idx_cfg_store_operation_owner_snapshot_entity (entity_type, entity_code, snapshot_date),
+  KEY idx_cfg_store_operation_owner_snapshot_entity_id (snapshot_date, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='门店经营负责人当前快照表';
+
+
+CREATE TABLE IF NOT EXISTS dim_store_operation_owner_assignment (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  entity_type VARCHAR(20) NOT NULL COMMENT '经营实体类型：STORE/SUBJECT',
+  entity_id BIGINT NULL COMMENT '经营实体ID；普通门店=store_id，共同考核主体=挂靠主店store_id',
+  entity_code VARCHAR(64) NOT NULL COMMENT '经营实体编码；普通门店=store_code，共同考核主体=subject_code',
+  entity_name VARCHAR(255) NOT NULL COMMENT '经营实体名称',
+  owner_name VARCHAR(100) NULL COMMENT '负责人名称，可为空',
+  source_snapshot_date DATE NOT NULL COMMENT '触发当前版本生效的快照日期',
+  source_file_name VARCHAR(255) NULL COMMENT '触发当前版本生效的来源文件名',
+  source_file_md5 CHAR(32) NULL COMMENT '触发当前版本生效的来源文件MD5',
+  effective_start_date DATE NOT NULL COMMENT '生效开始日',
+  effective_end_date DATE NOT NULL COMMENT '生效结束日',
+  is_current CHAR(1) NOT NULL DEFAULT 'Y' COMMENT '是否当前有效（Y/N）',
+  created_by VARCHAR(64) NULL COMMENT '创建人',
+  updated_by VARCHAR(64) NULL COMMENT '更新人',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_dim_store_operation_owner_assignment (entity_type, entity_code, effective_start_date),
+  KEY idx_dim_store_operation_owner_current (entity_type, entity_code, is_current, effective_start_date, effective_end_date),
+  KEY idx_dim_store_operation_owner_entity_id (entity_id, is_current),
+  KEY idx_dim_store_operation_owner_effective (effective_start_date, effective_end_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='门店经营负责人SCD2历史表';
+
+
+CREATE TABLE IF NOT EXISTS log_store_operation_owner_import (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  file_name VARCHAR(255) NOT NULL COMMENT '源文件名',
+  file_path VARCHAR(500) NULL COMMENT '源文件路径',
+  file_md5 CHAR(32) NULL COMMENT '源文件MD5',
+  source_sheet VARCHAR(100) NOT NULL COMMENT '来源工作表',
+  snapshot_date DATE NOT NULL COMMENT '快照日期',
+  records_total INT NOT NULL DEFAULT 0 COMMENT '源数据行数',
+  expected_entity_count INT NOT NULL DEFAULT 0 COMMENT '预期经营实体数',
+  matched_entity_count INT NOT NULL DEFAULT 0 COMMENT '成功匹配的经营实体数',
+  missing_entity_count INT NOT NULL DEFAULT 0 COMMENT '缺失经营实体数',
+  unexpected_entity_count INT NOT NULL DEFAULT 0 COMMENT '异常经营实体数',
+  snapshot_rows_inserted INT NOT NULL DEFAULT 0 COMMENT '快照表写入行数',
+  history_rows_opened INT NOT NULL DEFAULT 0 COMMENT '历史表开新或重开行数',
+  history_rows_closed INT NOT NULL DEFAULT 0 COMMENT '历史表关旧或同日替换行数',
+  status VARCHAR(20) NOT NULL COMMENT '执行状态',
+  message VARCHAR(1000) NULL COMMENT '执行摘要或错误信息',
+  started_at DATETIME NULL COMMENT '开始时间',
+  finished_at DATETIME NULL COMMENT '结束时间',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  KEY idx_log_store_operation_owner_import_created_at (created_at),
+  KEY idx_log_store_operation_owner_import_status (status),
+  KEY idx_log_store_operation_owner_import_snapshot_date (snapshot_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='门店经营负责人导入日志表';

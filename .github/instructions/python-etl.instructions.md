@@ -1,7 +1,7 @@
 ---
 name: "Python ETL Rules"
 description: "Use when editing ETL Python files, ETL scheduling scripts, or ETL automation tests. Covers lineage checks, incremental logic, idempotency, doc sync, and minimum verification."
-applyTo: "{etl_*.py,run_etl.py,run_ods.py,scheduled_etl.py,test_etl_automation.py}"
+applyTo: "etl_*.py, run_etl.py, run_ods.py, scheduled_etl.py, test_etl_automation.py"
 ---
 
 # Python ETL 专用规则

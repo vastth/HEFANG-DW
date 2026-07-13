@@ -5,12 +5,17 @@
 """
 
 import logging
+import argparse
 from datetime import datetime, timedelta
 import sys
 import os
 import time
 import traceback
 from alerts import send_wechat_alert
+from control_chain_summary import (
+    should_suppress_child_wechat_alert,
+    write_total_control_chain_summary,
+)
 from config import (
     WECHAT_WEBHOOK,
     TASK_DISPLAY_NAME,
@@ -19,7 +24,14 @@ from config import (
     ETL_DEFAULT_MAX_RETRIES,
     ETL_DEFAULT_RETRY_SLEEP,
 )
-from sqlalchemy import create_engine, text
+from db_connections import connect_oracle, create_mysql_engine
+from sqlalchemy import text
+from cutover_controls import (
+    CUTOVER_MODE_LEGACY,
+    CUTOVER_MODE_SHADOW_COMPARE,
+    CUTOVER_MODE_V2,
+    resolve_cutover_mode,
+)
 
 # 配置日志
 logging.basicConfig(
@@ -55,6 +67,9 @@ STEP_ORDER = [
     'dabo_ready',
     'ads_health',
 ]
+
+ODS_INCREMENTAL_BACKFILL_DAYS = 7
+DWS_SALES_MAINLINE_DAYS_BACK = ODS_INCREMENTAL_BACKFILL_DAYS
 
 
 def _truncate_text(text, max_len=160):
@@ -171,6 +186,143 @@ def _extract_error_summary(text):
     return lines[-1] if lines else text.strip()
 
 
+def _table_exists(conn, table_name):
+    row = conn.execute(text(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = :table_name
+        """
+    ), {'table_name': table_name}).fetchone()
+    return bool(row and row[0])
+
+
+def _format_probe_value(value):
+    if value is None:
+        return '-'
+    if isinstance(value, datetime):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    if hasattr(value, 'strftime'):
+        try:
+            return value.strftime('%Y-%m-%d')
+        except TypeError:
+            pass
+    return str(value)
+
+
+def _is_recent_dabo_label_batch(updated_at, source_file_mtime):
+    freshness_cutoff = datetime.now().date() - timedelta(days=1)
+    for value in (updated_at, source_file_mtime):
+        if value is None:
+            continue
+        value_date = value.date() if hasattr(value, 'date') else None
+        if value_date and value_date >= freshness_cutoff:
+            return True
+    return False
+
+
+def _probe_dabo_sources():
+    probe = {
+        'label_table_exists': False,
+        'label_ready': False,
+        'label_row_count': 0,
+        'label_exact_hit_count': 0,
+        'label_auto_alias_count': 0,
+        'label_unresolved_count': 0,
+        'label_latest_updated_at': None,
+        'label_latest_source_file': None,
+        'label_latest_source_file_mtime': None,
+        'legacy_csv_table_exists': False,
+        'legacy_csv_ready': False,
+        'legacy_csv_today_rows': 0,
+        'legacy_csv_total_rows': 0,
+        'legacy_csv_latest_sale_date': None,
+    }
+
+    engine = create_mysql_engine()
+    try:
+        with engine.connect() as conn:
+            if _table_exists(conn, 'ads_dabo_order_label'):
+                probe['label_table_exists'] = True
+                row = conn.execute(text(
+                    """
+                    SELECT
+                        source_file,
+                        MAX(source_file_mtime) AS source_file_mtime,
+                        COUNT(*) AS row_count,
+                        SUM(CASE WHEN normalization_status = 'exact_hit' THEN 1 ELSE 0 END) AS exact_hit_count,
+                        SUM(CASE WHEN normalization_status = 'auto_alias' THEN 1 ELSE 0 END) AS auto_alias_count,
+                        SUM(CASE WHEN normalization_status NOT IN ('exact_hit', 'auto_alias') THEN 1 ELSE 0 END) AS unresolved_count,
+                        MAX(updated_at) AS latest_updated_at
+                    FROM ads_dabo_order_label
+                    GROUP BY source_file
+                    ORDER BY MAX(updated_at) DESC, MAX(source_file_mtime) DESC, source_file DESC
+                    LIMIT 1
+                    """
+                )).mappings().first()
+                if row:
+                    probe['label_row_count'] = int(row['row_count'] or 0)
+                    probe['label_exact_hit_count'] = int(row['exact_hit_count'] or 0)
+                    probe['label_auto_alias_count'] = int(row['auto_alias_count'] or 0)
+                    probe['label_unresolved_count'] = int(row['unresolved_count'] or 0)
+                    probe['label_latest_updated_at'] = row['latest_updated_at']
+                    probe['label_latest_source_file'] = row['source_file']
+                    probe['label_latest_source_file_mtime'] = row['source_file_mtime']
+                    probe['label_ready'] = (
+                        probe['label_row_count'] > 0
+                        and _is_recent_dabo_label_batch(
+                            probe['label_latest_updated_at'],
+                            probe['label_latest_source_file_mtime'],
+                        )
+                    )
+
+            if _table_exists(conn, 'ads_dabo_daily_sales'):
+                probe['legacy_csv_table_exists'] = True
+                row = conn.execute(text(
+                    """
+                    SELECT
+                        SUM(CASE WHEN sale_date = CURDATE() THEN 1 ELSE 0 END) AS today_rows,
+                        COUNT(*) AS total_rows,
+                        MAX(sale_date) AS latest_sale_date
+                    FROM ads_dabo_daily_sales
+                    """
+                )).mappings().first()
+                if row:
+                    probe['legacy_csv_today_rows'] = int(row['today_rows'] or 0)
+                    probe['legacy_csv_total_rows'] = int(row['total_rows'] or 0)
+                    probe['legacy_csv_latest_sale_date'] = row['latest_sale_date']
+                    probe['legacy_csv_ready'] = probe['legacy_csv_today_rows'] > 0
+    finally:
+        engine.dispose()
+
+    return probe
+
+
+def _build_dabo_ready_detail(probe):
+    label_status = 'READY' if probe['label_ready'] else 'PENDING'
+    legacy_status = 'READY' if probe['legacy_csv_ready'] else 'STALE'
+
+    if not probe['label_table_exists']:
+        label_part = 'label=missing'
+    else:
+        label_part = (
+            f"label={label_status} rows={probe['label_row_count']} "
+            f"unresolved={probe['label_unresolved_count']} "
+            f"updated={_format_probe_value(probe['label_latest_updated_at'])}"
+        )
+
+    if not probe['legacy_csv_table_exists']:
+        legacy_part = 'legacy_csv=missing'
+    else:
+        legacy_part = (
+            f"legacy_csv={legacy_status} today={probe['legacy_csv_today_rows']} "
+            f"latest={_format_probe_value(probe['legacy_csv_latest_sale_date'])}"
+        )
+
+    return f"{label_part}; {legacy_part}"
+
+
 def _compose_run_summary_message(step_reports, overall_status, started_at, ended_at, attempt=None, max_retries=None, extra_message=None):
     normalized = _normalize_step_reports(step_reports)
     all_steps = [k for k in STEP_ORDER if k in normalized]
@@ -240,6 +392,114 @@ def _compose_run_summary_message(step_reports, overall_status, started_at, ended
     return '\n'.join(lines)
 
 
+def _build_run_chain_summary_payload(
+    step_reports,
+    overall_status,
+    started_at,
+    ended_at,
+    attempt=None,
+    max_retries=None,
+    extra_message=None,
+):
+    normalized = _normalize_step_reports(step_reports)
+    all_steps = [key for key in STEP_ORDER if key in normalized]
+    if not all_steps:
+        all_steps = list(normalized.keys())
+
+    success_cnt = 0
+    warning_cnt = 0
+    failed_cnt = 0
+    detail_lines = []
+    issue_lines = []
+    status_icon = {
+        'SUCCESS': '✅',
+        'WARNING': '⚠️',
+        'FAILED': '❌',
+        'ERROR': '❌',
+        'UNKNOWN': '❔',
+    }
+    title_map = {
+        'SUCCESS': 'ETL执行完成',
+        'FAILED': 'ETL执行完成（存在失败）',
+        'ERROR': 'ETL执行异常',
+    }
+
+    for index, task in enumerate(all_steps, start=1):
+        report = normalized[task]
+        status = report['status']
+        if status == 'SUCCESS':
+            success_cnt += 1
+        elif status == 'WARNING':
+            warning_cnt += 1
+        elif status in ('FAILED', 'ERROR'):
+            failed_cnt += 1
+
+        display = TASK_DISPLAY_NAME.get(task, task)
+        icon = status_icon.get(status, '❔')
+        duration = report.get('duration_seconds')
+        cost = '' if duration is None else f' [{duration}s]'
+        detail = f'（{report["detail"]}）' if report.get('detail') else ''
+        detail_lines.append(f'{index}. {icon} {display}: {status}{cost}{detail}')
+
+        if status in ('WARNING', 'FAILED', 'ERROR'):
+            issue_lines.append(f'- {display}: {report.get("detail") or status}')
+
+    summary_lines = [
+        f'结果：成功{success_cnt} / 警告{warning_cnt} / 失败{failed_cnt}',
+    ]
+    if attempt is not None and max_retries is not None:
+        summary_lines.append(f'重试：第 {attempt}/{max_retries} 次')
+    if extra_message:
+        summary_lines.append(extra_message)
+
+    return {
+        'chain_key': 'main_etl',
+        'chain_label': '主链调度',
+        'status': overall_status,
+        'headline': title_map.get(overall_status, 'ETL执行摘要'),
+        'started_at': started_at,
+        'ended_at': ended_at,
+        'duration_seconds': int((ended_at - started_at).total_seconds()),
+        'summary_lines': summary_lines,
+        'detail_lines': detail_lines,
+        'issue_lines': issue_lines,
+    }
+
+
+def _emit_run_summary(
+    webhook_url,
+    step_reports,
+    overall_status,
+    started_at,
+    ended_at,
+    attempt=None,
+    max_retries=None,
+    extra_message=None,
+):
+    summary_content = _compose_run_summary_message(
+        step_reports,
+        overall_status=overall_status,
+        started_at=started_at,
+        ended_at=ended_at,
+        attempt=attempt,
+        max_retries=max_retries,
+        extra_message=extra_message,
+    )
+    write_total_control_chain_summary(
+        _build_run_chain_summary_payload(
+            step_reports,
+            overall_status=overall_status,
+            started_at=started_at,
+            ended_at=ended_at,
+            attempt=attempt,
+            max_retries=max_retries,
+            extra_message=extra_message,
+        )
+    )
+    if not should_suppress_child_wechat_alert():
+        send_wechat_alert(webhook_url, summary_content)
+
+
 def _compose_failure_summary_from_results(results_dict):
     normalized = _normalize_step_reports(results_dict)
     parts = []
@@ -264,11 +524,9 @@ def run_conn_test():
     details = {}
     # Oracle
     try:
-        from config import ORACLE_CONFIG, ORACLE_DSN
         logger.info('ConnTest: testing Oracle connection...')
         try:
-            import oracledb
-            conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
+            conn = connect_oracle()
             conn.close()
             logger.info('ConnTest: Oracle OK')
             details['oracle'] = 'SUCCESS'
@@ -285,10 +543,9 @@ def run_conn_test():
 
     # MySQL
     try:
-        from config import MYSQL_CONN_STR
         logger.info('ConnTest: testing MySQL connection...')
         try:
-            engine = create_engine(MYSQL_CONN_STR)
+            engine = create_mysql_engine()
             with engine.connect() as conn:
                 conn.execute(text('SELECT 1'))
             engine.dispose()
@@ -308,13 +565,14 @@ def run_conn_test():
     return ok, details
 
 
-def run_all():
+def run_all(cutover_mode=CUTOVER_MODE_LEGACY):
     """执行所有ETL任务"""
-    
+
     start_time = datetime.now()
     logger.info("#"*60)
     logger.info("#  何方珠宝 - 数仓ETL开始执行")
     logger.info("#"*60)
+    logger.info('主链 cutover_mode=%s', cutover_mode)
     
     step_reports = {}
 
@@ -381,7 +639,13 @@ def run_all():
     step_start = datetime.now()
     try:
         from run_ods import run as run_ods_sync
-        run_ods_sync(mode='incremental', backfill_days=7, window_days=None, run_qc=True, qc_days=7)
+        run_ods_sync(
+            mode='incremental',
+            backfill_days=ODS_INCREMENTAL_BACKFILL_DAYS,
+            window_days=None,
+            run_qc=True,
+            qc_days=ODS_INCREMENTAL_BACKFILL_DAYS,
+        )
         update_step('ods_sync', 'SUCCESS', '增量同步与质量校验完成', step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
@@ -393,7 +657,7 @@ def run_all():
     step_start = datetime.now()
     try:
         from etl_dws_sales import run as run_dws_sales, backfill as backfill_dws_sales
-        run_dws_sales(days_back=1, include_today=True)  # 实时同步（含当天）
+        run_dws_sales(days_back=DWS_SALES_MAINLINE_DAYS_BACK, include_today=True)
 
         # 覆盖性校验：若近30天数据不完整，则自动回补
         end_dt = datetime.now() - timedelta(days=1)
@@ -401,8 +665,7 @@ def run_all():
         end_date = int(end_dt.strftime('%Y%m%d'))
         start_date = int(start_dt.strftime('%Y%m%d'))
 
-        from config import MYSQL_CONN_STR
-        engine = create_engine(MYSQL_CONN_STR)
+        engine = create_mysql_engine()
         with engine.connect() as conn:
             row = conn.execute(text(
                 """
@@ -419,7 +682,7 @@ def run_all():
             logger.warning(f"近30天销售数据仅覆盖{day_cnt}天，执行回补（{start_date} - {end_date}）...")
             backfill_dws_sales(start_date, end_date)
             backfilled = True
-        detail = f"近30天覆盖{day_cnt}/30天"
+        detail = f"主链近{DWS_SALES_MAINLINE_DAYS_BACK}天回带，近30天覆盖{day_cnt}/30天"
         if backfilled:
             detail += f"，已回补[{start_date}-{end_date}]"
         update_step('dws_sales', 'SUCCESS', detail, step_start)
@@ -440,33 +703,41 @@ def run_all():
         update_step('dws_inventory', 'FAILED', _extract_error_summary(error_msg), step_start)
         logger.error(f"dws_inventory failed: {error_msg}")
 
-    # 8. 达播数据就绪检查（外部项目产出）
+    # 8. 达播数据就绪检查（标签主线优先，legacy CSV 兼容）
     logger.info("\n>>> [8/9] Checking dabo data readiness...")
-    dabo_ready = False
+    dabo_label_ready = False
+    legacy_csv_ready = False
     step_start = datetime.now()
     try:
-        from config import MYSQL_CONN_STR
-        engine = create_engine(MYSQL_CONN_STR)
-        today = datetime.now().strftime('%Y-%m-%d')
-        with engine.connect() as conn:
-            row = conn.execute(text(
-                """
-                SELECT COUNT(*) AS cnt, MAX(sale_date) AS latest_date
-                FROM ads_dabo_daily_sales
-                WHERE sale_date = :today
-                """
-            ), {"today": today}).fetchone()
-        engine.dispose()
+        probe = _probe_dabo_sources()
+        dabo_label_ready = probe['label_ready']
+        legacy_csv_ready = probe['legacy_csv_ready']
+        detail = _build_dabo_ready_detail(probe)
 
-        dabo_cnt = row[0] if row else 0
-        latest_date = row[1] if row else None
-        if dabo_cnt > 0:
-            dabo_ready = True
-            logger.info(f"达播数据就绪：今日记录 {dabo_cnt} 条（latest_date={latest_date}）")
-            update_step('dabo_ready', 'SUCCESS', f"今日记录{dabo_cnt}条，latest_date={latest_date}", step_start)
+        if dabo_label_ready:
+            logger.info(
+                "达播标签主线已就绪：source_file=%s, rows=%s, unresolved=%s, updated=%s",
+                probe['label_latest_source_file'],
+                probe['label_row_count'],
+                probe['label_unresolved_count'],
+                _format_probe_value(probe['label_latest_updated_at']),
+            )
+            if legacy_csv_ready:
+                logger.info(
+                    "达播 legacy CSV 当日数据可用于 ads_health 回填：today_rows=%s, latest_sale_date=%s",
+                    probe['legacy_csv_today_rows'],
+                    _format_probe_value(probe['legacy_csv_latest_sale_date']),
+                )
+            else:
+                logger.warning(
+                    "达播 legacy CSV 未更新至当日，ads_health 将跳过回填：today_rows=%s, latest_sale_date=%s",
+                    probe['legacy_csv_today_rows'],
+                    _format_probe_value(probe['legacy_csv_latest_sale_date']),
+                )
+            update_step('dabo_ready', 'SUCCESS', detail, step_start)
         else:
-            logger.warning(f"达播数据未就绪：今日无记录（latest_date={latest_date}），将继续执行ADS计算")
-            update_step('dabo_ready', 'WARNING', f"今日无记录，latest_date={latest_date}", step_start)
+            logger.warning("达播标签主线未就绪：%s", detail)
+            update_step('dabo_ready', 'WARNING', detail, step_start)
     except Exception as e:
         error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
         update_step('dabo_ready', 'FAILED', _extract_error_summary(error_msg), step_start)
@@ -487,15 +758,63 @@ def run_all():
         logger.warning(detail)
     else:
         try:
-            from etl_ads_health import run as run_ads_health, backfill_dabo_fields
-            run_ads_health()
+            from etl_ads_health import (
+                LEGACY_DWS_INVENTORY_TABLE,
+                LEGACY_DWS_SALES_TABLE,
+                SHADOW_DWS_INVENTORY_TABLE,
+                SHADOW_DWS_SALES_TABLE,
+                run as run_ads_health,
+                validate_inventory_health_shadow_against_persisted,
+            )
 
-            # 达播数据就绪时，回填当日达播/自然字段（避免外部项目时序影响）
-            if dabo_ready:
-                backfill_dabo_fields()
-                update_step('ads_health', 'SUCCESS', '健康度计算完成，已回填当日达播字段', step_start)
+            if dabo_label_ready:
+                dabo_source_mode = 'label'
+            elif legacy_csv_ready:
+                dabo_source_mode = 'legacy'
             else:
-                update_step('ads_health', 'SUCCESS', '健康度计算完成，未回填达播字段', step_start)
+                dabo_source_mode = 'none'
+
+            inventory_table = LEGACY_DWS_INVENTORY_TABLE
+            sales_table = LEGACY_DWS_SALES_TABLE
+            detail = '健康度计算完成，按旧 DWS 读源执行'
+            status = 'SUCCESS'
+
+            if cutover_mode == CUTOVER_MODE_V2:
+                inventory_table = SHADOW_DWS_INVENTORY_TABLE
+                sales_table = SHADOW_DWS_SALES_TABLE
+                detail = '健康度计算完成，已切换到 v2 DWS 读源执行'
+            elif cutover_mode == CUTOVER_MODE_SHADOW_COMPARE:
+                detail = '健康度计算完成，按旧 DWS 读源执行并补做 v2 shadow ADS 对账'
+
+            if dabo_label_ready:
+                detail += '；达播字段按标签主线回填'
+            elif legacy_csv_ready:
+                detail += '；达播字段按 legacy CSV 回填'
+            else:
+                detail += '；未检测到可用达播源，达播字段按0处理'
+
+            run_ads_health(
+                dabo_source_mode=dabo_source_mode,
+                inventory_table=inventory_table,
+                sales_table=sales_table,
+            )
+
+            if cutover_mode == CUTOVER_MODE_SHADOW_COMPARE:
+                compare_summary = validate_inventory_health_shadow_against_persisted(
+                    dabo_source_mode=dabo_source_mode,
+                    sample_limit=20,
+                )
+                detail += (
+                    '；ADS shadow 对账 '
+                    f"status={compare_summary.get('status', '-')}, "
+                    f"mismatch_count={compare_summary.get('mismatch_count', '-')}, "
+                    f"shadow_inventory_table={compare_summary.get('shadow_inventory_table', '-')}, "
+                    f"shadow_sales_table={compare_summary.get('shadow_sales_table', '-')}"
+                )
+                if compare_summary.get('status') != 'SUCCESS':
+                    status = 'WARNING'
+
+            update_step('ads_health', status, detail, step_start)
         except Exception as e:
             error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
             update_step('ads_health', 'FAILED', _extract_error_summary(error_msg), step_start)
@@ -593,7 +912,8 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
 
             if ok:
                 ended_at = datetime.now()
-                summary_content = _compose_run_summary_message(
+                _emit_run_summary(
+                    webhook_url,
                     details,
                     overall_status='SUCCESS',
                     started_at=run_started_at,
@@ -601,7 +921,6 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
                     attempt=attempt,
                     max_retries=max_retries,
                 )
-                send_wechat_alert(webhook_url, summary_content)
                 return 0
             else:
                 logger.warning(f'ETL finished with partial failures on attempt {attempt}.')
@@ -613,7 +932,8 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
                 if not should_retry:
                     # 发现确定性不可重试错误，立即告警并返回
                     ended_at = datetime.now()
-                    summary_content = _compose_run_summary_message(
+                    _emit_run_summary(
+                        webhook_url,
                         details,
                         overall_status='FAILED',
                         started_at=run_started_at,
@@ -622,13 +942,13 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
                         max_retries=max_retries,
                         extra_message='失败原因：命中不可重试错误，已停止重试。',
                     )
-                    send_wechat_alert(webhook_url, summary_content)
                     return 2
 
                 # 到达最大重试次数则发送告警
                 if attempt >= max_retries:
                     ended_at = datetime.now()
-                    summary_content = _compose_run_summary_message(
+                    _emit_run_summary(
+                        webhook_url,
                         details,
                         overall_status='FAILED',
                         started_at=run_started_at,
@@ -637,7 +957,6 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
                         max_retries=max_retries,
                         extra_message='已达到最大重试次数。',
                     )
-                    send_wechat_alert(webhook_url, summary_content)
                     return 2
 
                 logger.info(f'等待 {sleep_seconds} 秒后重试...')
@@ -655,7 +974,8 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
                         'duration_seconds': int((ended_at - run_started_at).total_seconds()),
                     }
                 }
-                summary_content = _compose_run_summary_message(
+                _emit_run_summary(
+                    webhook_url,
                     synthetic_report,
                     overall_status='ERROR',
                     started_at=run_started_at,
@@ -663,7 +983,6 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
                     attempt=attempt,
                     max_retries=max_retries,
                 )
-                send_wechat_alert(webhook_url, summary_content)
                 return 1
             else:
                 logger.info(f'等待 {sleep_seconds} 秒后重试...')
@@ -671,10 +990,27 @@ def main_with_retries(run_func, max_retries=3, sleep_seconds=60, webhook_url=Non
     return 1
 
 
-def run_main(conn_test_flag=None, max_retries=None, retry_sleep=None):
+def build_parser():
+    parser = argparse.ArgumentParser(description='何方珠宝数仓 ETL 主链入口')
+    parser.add_argument('--conn-test', action='store_true', help='只做连接测试，不执行写数 ETL')
+    parser.add_argument(
+        '--cutover-mode',
+        choices=(CUTOVER_MODE_LEGACY, CUTOVER_MODE_SHADOW_COMPARE, CUTOVER_MODE_V2),
+        default=None,
+        help='主链 ADS cutover 模式：legacy=旧链，shadow_compare=旧链写数并追加 v2 shadow ADS 对账，v2=ads_inventory_health 改读 DWS v2。',
+    )
+    parser.add_argument('--rollback-to-legacy', action='store_true', help='显式回滚到 legacy 模式，优先级高于 --cutover-mode')
+    parser.add_argument('--max-retries', type=int, default=None, help='覆盖主链最大重试次数')
+    parser.add_argument('--retry-sleep', type=int, default=None, help='覆盖主链重试等待秒数')
+    return parser
+
+
+def run_main(conn_test_flag=None, max_retries=None, retry_sleep=None, cutover_mode=None, rollback_to_legacy=False):
     # 解析是否启用连接测试模式（命令行或环境变量）
     if conn_test_flag is None:
         conn_test_flag = ('--conn-test' in sys.argv) or (os.getenv('ETL_CONN_TEST', '0') == '1')
+
+    effective_cutover_mode = resolve_cutover_mode(cutover_mode, rollback_to_legacy=rollback_to_legacy)
 
     # 支持通过环境变量临时覆盖最大重试次数（便于测试）
     if max_retries is None:
@@ -692,10 +1028,20 @@ def run_main(conn_test_flag=None, max_retries=None, retry_sleep=None):
         logger.info('运行模式：仅连接测试（--conn-test / ETL_CONN_TEST=1）')
         runner = run_conn_test
     else:
-        runner = run_all
+        logger.info('运行模式：cutover_mode=%s', effective_cutover_mode)
+        runner = lambda: run_all(cutover_mode=effective_cutover_mode)
 
     return main_with_retries(runner, max_retries=max_retries, sleep_seconds=retry_sleep)
 
 
 if __name__ == '__main__':
-    sys.exit(run_main())
+    args = build_parser().parse_args()
+    sys.exit(
+        run_main(
+            conn_test_flag=args.conn_test,
+            max_retries=args.max_retries,
+            retry_sleep=args.retry_sleep,
+            cutover_mode=args.cutover_mode,
+            rollback_to_legacy=args.rollback_to_legacy,
+        )
+    )

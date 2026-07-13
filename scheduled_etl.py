@@ -6,8 +6,15 @@ ETL自动化调度配置
 
 import os
 import sys
+import argparse
 from datetime import datetime
 import logging
+
+from cutover_controls import (
+    CUTOVER_MODE_LEGACY,
+    CUTOVER_MODE_SHADOW_COMPARE,
+    CUTOVER_MODE_V2,
+)
 
 # 设置工作目录
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +44,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def run_etl_with_error_handling():
+def run_etl_with_error_handling(cutover_mode=None, rollback_to_legacy=False):
     """带错误处理的ETL执行"""
     try:
         logger.info("="*80)
@@ -46,10 +53,15 @@ def run_etl_with_error_handling():
         logger.info("="*80)
 
         conn_test_flag = ('--conn-test' in sys.argv) or (os.getenv('ETL_CONN_TEST', '0') == '1')
+        logger.info('scheduled_etl cutover_mode=%s rollback_to_legacy=%s', cutover_mode, rollback_to_legacy)
         
         # 统一走 run_etl.py 入口（内含重试与企业微信摘要）
         from run_etl import run_main
-        exit_code = run_main()
+        exit_code = run_main(
+            conn_test_flag=conn_test_flag,
+            cutover_mode=cutover_mode,
+            rollback_to_legacy=rollback_to_legacy,
+        )
 
         if exit_code == 0:
             logger.info("✅ ETL执行成功")
@@ -77,6 +89,23 @@ def run_etl_with_error_handling():
         logger.error(f"❌ ETL调度异常: {e}", exc_info=True)
         return 3
 
+def build_parser():
+    parser = argparse.ArgumentParser(description='ETL 自动化调度包装入口')
+    parser.add_argument('--conn-test', action='store_true', help='只做连接测试，不执行写数 ETL')
+    parser.add_argument(
+        '--cutover-mode',
+        choices=(CUTOVER_MODE_LEGACY, CUTOVER_MODE_SHADOW_COMPARE, CUTOVER_MODE_V2),
+        default=None,
+        help='透传给 run_etl.py 的主链 cutover 模式',
+    )
+    parser.add_argument('--rollback-to-legacy', action='store_true', help='显式回滚到 legacy 模式')
+    return parser
+
+
 if __name__ == '__main__':
-    exit_code = run_etl_with_error_handling()
+    args = build_parser().parse_args()
+    exit_code = run_etl_with_error_handling(
+        cutover_mode=args.cutover_mode,
+        rollback_to_legacy=args.rollback_to_legacy,
+    )
     sys.exit(exit_code)

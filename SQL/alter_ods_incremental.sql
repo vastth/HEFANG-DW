@@ -23,6 +23,7 @@ ALTER TABLE ods_sync_state ADD COLUMN current_window_end DATETIME NULL;
 ALTER TABLE ods_sync_state ADD COLUMN status VARCHAR(20) NULL;
 
 -- Optional indexes for incremental deletes
+CREATE INDEX idx_ods_m_retail_id ON ods_m_retail (id);
 CREATE INDEX idx_ods_m_retail_modifieddate ON ods_m_retail (modifieddate);
 CREATE INDEX idx_ods_m_retailitem_modifieddate ON ods_m_retailitem (modifieddate);
 CREATE INDEX idx_ods_m_retailitem_settime ON ods_m_retailitem (settime);

@@ -9,14 +9,13 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config import MYSQL_CONN_STR, ORACLE_CONFIG
+from db_connections import create_mysql_engine, create_oracle_engine
 
 
 READ_ONLY_BLOCKLIST = re.compile(
@@ -81,6 +80,144 @@ SQL_TEMPLATES = {
             LIMIT 20
         """,
     },
+    "mysql_dabo_actual_daily_by_billdate": {
+        "source": "mysql",
+        "description": "按 ODS BILLDATE 汇总指定达播样本文件的每日实收/退款（需 --param source_file=...）",
+        "sql": """
+            WITH dabo_order_scope AS (
+                SELECT DISTINCT main_order_id
+                FROM ads_dabo_order_bridge
+                WHERE source_file = :source_file
+                  AND main_order_id IS NOT NULL
+                  AND main_order_id <> ''
+            ),
+            dabo_retail AS (
+                SELECT DISTINCT
+                    r.id,
+                    r.billdate,
+                    r.oms_sourcecode,
+                    r.tot_amt_actual
+                FROM ods_m_retail r
+                INNER JOIN dabo_order_scope s
+                    ON s.main_order_id = r.oms_sourcecode
+                WHERE r.isactive = 'Y'
+                  AND r.status = 2
+                                UNION
+                                SELECT DISTINCT
+                                        c.retail_id AS id,
+                                        c.billdate,
+                                        c.main_order_id AS oms_sourcecode,
+                                        c.retail_tot_amt_actual AS tot_amt_actual
+                                FROM ads_dabo_order_retail_bridge c
+                                INNER JOIN dabo_order_scope s
+                                        ON s.main_order_id = c.main_order_id
+                                WHERE c.source_file = :source_file
+                                    AND c.retail_isactive = 'Y'
+                                    AND c.retail_status = 2
+                                    AND NOT EXISTS (
+                                            SELECT 1
+                                            FROM ods_m_retail r
+                                            WHERE r.oms_sourcecode = c.main_order_id
+                                                AND r.isactive = 'Y'
+                                                AND r.status = 2
+                                    )
+            )
+            SELECT
+                r.billdate,
+                COUNT(DISTINCT r.oms_sourcecode) AS matched_main_order_count,
+                COUNT(DISTINCT CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN r.id END) AS sales_order_count,
+                COUNT(DISTINCT CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN r.id END) AS return_order_count,
+                SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.qty ELSE 0 END) AS sales_qty,
+                ROUND(SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.tot_amt_actual ELSE 0 END), 2) AS sales_amount,
+                SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.qty) ELSE 0 END) AS return_qty,
+                ROUND(SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.tot_amt_actual) ELSE 0 END), 2) AS return_amount,
+                ROUND(
+                    SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.tot_amt_actual ELSE 0 END)
+                    - SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.tot_amt_actual) ELSE 0 END),
+                    2
+                ) AS net_amount
+            FROM dabo_retail r
+            INNER JOIN ods_m_retailitem ri
+                ON ri.m_retail_id = r.id
+            WHERE ri.m_productalias_id IS NOT NULL
+            GROUP BY r.billdate
+            ORDER BY r.billdate
+        """,
+    },
+    "mysql_dabo_tagged_daily_by_billdate": {
+        "source": "mysql",
+        "description": "按达播订单标签表汇总指定订单管理 Excel 的每日实收/退款（需 --param source_file=...）",
+        "sql": """
+            WITH dabo_order_scope AS (
+                SELECT DISTINCT
+                    COALESCE(NULLIF(canonical_system_order_id, ''), system_order_id) AS bridge_system_order_id,
+                    dabo_channel_code,
+                    dabo_channel_name
+                FROM ads_dabo_order_label
+                WHERE source_file = :source_file
+                  AND is_dabo_order = 1
+                  AND system_order_id IS NOT NULL
+                  AND system_order_id <> ''
+            ),
+            dabo_retail AS (
+                SELECT DISTINCT
+                    r.id,
+                    r.billdate,
+                    r.oms_sourcecode,
+                    r.tot_amt_actual,
+                    s.dabo_channel_code,
+                    s.dabo_channel_name
+                FROM ods_m_retail r
+                INNER JOIN dabo_order_scope s
+                                        ON s.bridge_system_order_id = r.oms_sourcecode
+                WHERE r.isactive = 'Y'
+                  AND r.status = 2
+                UNION
+                SELECT DISTINCT
+                    c.retail_id AS id,
+                    c.billdate,
+                    c.main_order_id AS oms_sourcecode,
+                    c.retail_tot_amt_actual AS tot_amt_actual,
+                    s.dabo_channel_code,
+                    s.dabo_channel_name
+                FROM ads_dabo_order_retail_bridge c
+                INNER JOIN dabo_order_scope s
+                    ON s.bridge_system_order_id = c.main_order_id
+                WHERE c.source_file = :source_file
+                  AND c.retail_isactive = 'Y'
+                  AND c.retail_status = 2
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM ods_m_retail r
+                      WHERE r.oms_sourcecode = c.main_order_id
+                        AND r.isactive = 'Y'
+                        AND r.status = 2
+                  )
+            )
+            SELECT
+                r.billdate,
+                r.dabo_channel_code,
+                r.dabo_channel_name,
+                COUNT(DISTINCT r.oms_sourcecode) AS matched_system_order_count,
+                COUNT(DISTINCT CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN r.id END) AS sales_order_count,
+                COUNT(DISTINCT CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN r.id END) AS return_order_count,
+                SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.qty ELSE 0 END) AS sales_qty,
+                ROUND(SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.tot_amt_actual ELSE 0 END), 2) AS sales_amount,
+                SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.qty) ELSE 0 END) AS return_qty,
+                ROUND(SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.tot_amt_actual) ELSE 0 END), 2) AS return_amount,
+                ROUND(
+                    SUM(CASE WHEN r.tot_amt_actual > 0 OR (r.tot_amt_actual = 0 AND ri.qty > 0) THEN ri.tot_amt_actual ELSE 0 END)
+                    - SUM(CASE WHEN r.tot_amt_actual < 0 OR (r.tot_amt_actual = 0 AND ri.qty < 0) THEN ABS(ri.tot_amt_actual) ELSE 0 END),
+                    2
+                ) AS net_amount
+            FROM dabo_retail r
+            INNER JOIN ods_m_retailitem ri
+                ON ri.m_retail_id = r.id
+            WHERE ri.m_productalias_id IS NOT NULL
+            GROUP BY r.billdate, r.dabo_channel_code, r.dabo_channel_name
+            ORDER BY r.billdate, r.dabo_channel_code
+        """,
+    },
     "oracle_retail_docs_7d": {
         "source": "oracle",
         "description": "最近 7 天 Oracle 零售单据统计",
@@ -124,19 +261,11 @@ def _validate_read_only_sql(sql: str) -> str:
 
 
 def _build_oracle_engine():
-    oracle_url = URL.create(
-        "oracle+oracledb",
-        username=ORACLE_CONFIG["user"],
-        password=ORACLE_CONFIG["password"],
-        host=ORACLE_CONFIG["host"],
-        port=ORACLE_CONFIG["port"],
-        database=ORACLE_CONFIG["service_name"],
-    )
-    return create_engine(oracle_url)
+    return create_oracle_engine()
 
 
 def _build_mysql_engine():
-    return create_engine(MYSQL_CONN_STR)
+    return create_mysql_engine()
 
 
 def _parse_param(raw_value: str):

@@ -4,10 +4,10 @@ ETL自动化测试与验证脚本
 验证所有ETL任务执行结果和数据质量
 """
 
-import pymysql
 import sys
 from datetime import datetime, timedelta
-from config import MYSQL_CONFIG, ORACLE_CONFIG, ORACLE_DSN, ORACLE_VERIFY_QUERIES
+from config import ORACLE_VERIFY_QUERIES
+from db_connections import connect_mysql, connect_oracle
 
 # 配置UTF-8输出
 if hasattr(sys.stdout, 'reconfigure'):
@@ -18,13 +18,7 @@ ORACLE_DIFF_THRESHOLD_PCT = 0.5
 
 def get_mysql_conn():
     """获取MySQL连接（从配置/环境变量读取）"""
-    return pymysql.connect(
-        host=MYSQL_CONFIG['host'],
-        port=MYSQL_CONFIG['port'],
-        user=MYSQL_CONFIG['user'],
-        password=MYSQL_CONFIG['password'],
-        database=MYSQL_CONFIG['database']
-    )
+    return connect_mysql()
 
 
 def get_oracle_count(key):
@@ -36,8 +30,7 @@ def get_oracle_count(key):
     if not sql:
         return None
     try:
-        import oracledb
-        conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
+        conn = connect_oracle()
         cur = conn.cursor()
         cur.execute(sql)
         row = cur.fetchone()
@@ -56,8 +49,7 @@ def get_oracle_metrics(key):
     if not sql:
         return None
     try:
-        import oracledb
-        conn = oracledb.connect(user=ORACLE_CONFIG['user'], password=ORACLE_CONFIG['password'], dsn=ORACLE_DSN)
+        conn = connect_oracle()
         cur = conn.cursor()
         cur.execute(sql)
         row = cur.fetchone()

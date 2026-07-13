@@ -15,9 +15,21 @@ TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 RULES: list[tuple[str, re.Pattern[str], str]] = [
     (
+        "db-write-risk",
+        re.compile(
+            r"(?is)\b(CREATE|ALTER|DROP|TRUNCATE|INSERT|UPDATE|DELETE|MERGE|KILL)\b|索引创建|补数|回填|批量修数"
+        ),
+        "Database write reminder: DDL/DML/index/backfill/bulk changes are user-executed by default; provide SQL, scripts, and execution order instead of writing data.",
+    ),
+    (
         "copilot-customization",
         re.compile(r"(?i)(\.github[\\/].*(\.md|\.json)|copilot-instructions\.md)"),
         "Customization reminder: check runtime acceptance, meeting notes, handoff, and lessons.",
+    ),
+    (
+        "context-governance",
+        re.compile(r"(?i)(agent_context_pack\.py|build_agent_lessons_index\.py|AGENT_LESSONS_INDEX\.md|AGENT_LESSONS\.md|AGENT_HANDOFF\.md)"),
+        "Context reminder: avoid full reads of large governance docs; refresh context pack or lesson index when needed.",
     ),
     (
         "etl",
@@ -26,12 +38,12 @@ RULES: list[tuple[str, re.Pattern[str], str]] = [
     ),
     (
         "sql",
-        re.compile(r"(?i)(^|[\\/])SQL[\\/].*\.sql"),
-        "SQL reminder: check data dictionary, contracts, doc-sync, and handoff.",
+        re.compile(r"(?i)(^|[\\/])SQL[\\/].*\.sql|docs[\\/].*\.sql|\.sql\b"),
+        "SQL reminder: check data dictionary, contracts, timeout risk, doc-sync, and handoff.",
     ),
     (
         "meeting-minutes",
-        re.compile(r"(?i)docs[\\/]misc[\\/].*会议纪要.*\.md"),
+        re.compile(r"(?i)docs[\\/].*会议纪要.*\.md"),
         "Meeting notes reminder: check current status, new conclusions, version record, and handoff.",
     ),
     (
@@ -66,12 +78,17 @@ def ensure_log_dir() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def write_hook_log(result: str, matched_rule: str, preview: str) -> None:
+def sanitize_text(value: str) -> str:
+    return value.encode("utf-8", errors="replace").decode("utf-8")
+
+
+def write_hook_log(result: str, matched_rules: list[str], preview: str) -> None:
     entry = {
         "timestamp": datetime.now().strftime(TIMESTAMP_FORMAT),
-        "result": result,
-        "matchedRule": matched_rule,
-        "preview": preview,
+        "result": sanitize_text(result),
+        "matchedRule": sanitize_text(matched_rules[0]) if matched_rules else "",
+        "matchedRules": [sanitize_text(rule) for rule in matched_rules],
+        "preview": sanitize_text(preview),
     }
     with LOG_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -80,20 +97,26 @@ def write_hook_log(result: str, matched_rule: str, preview: str) -> None:
 def main() -> int:
     ensure_log_dir()
     raw_input = sys.stdin.read()
-    preview = raw_input.replace("\r", " ").replace("\n", " ")[:300]
+    preview = sanitize_text(raw_input.replace("\r", " ").replace("\n", " ")[:300])
 
     if not raw_input.strip():
-        write_hook_log("empty-input", "", "")
+        write_hook_log("empty-input", [], "")
         sys.stdout.write('{"continue":true}\n')
         return 0
 
+    matched_rules: list[str] = []
+    messages: list[str] = []
     for matched_rule, pattern, message in RULES:
         if pattern.search(raw_input):
-            write_hook_log("warning", matched_rule, preview)
-            sys.stderr.write(message + "\n")
-            return 1
+            matched_rules.append(matched_rule)
+            messages.append(message)
 
-    write_hook_log("no-match", "", preview)
+    if matched_rules:
+        write_hook_log("warning", matched_rules, preview)
+        sys.stderr.write("\n".join(messages) + "\n")
+        return 1
+
+    write_hook_log("no-match", [], preview)
     sys.stdout.write('{"continue":true}\n')
     return 0
 

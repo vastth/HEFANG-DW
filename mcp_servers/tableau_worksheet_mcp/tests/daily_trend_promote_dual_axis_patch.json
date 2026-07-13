@@ -1,0 +1,37 @@
+{
+  "rows_text": "([federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk] + [federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_target_amt:qk])",
+  "cols_text": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[none:sales_date:qk]",
+  "dependency_fields": [
+    "当日实际",
+    "当日目标",
+    "销售日期"
+  ],
+  "replace_panes": true,
+  "pane_specs": [
+    {
+      "attrs": {
+        "selection-relaxation-option": "selection-relaxation-allow"
+      },
+      "mark_class": "Automatic",
+      "clear_encodings": true
+    },
+    {
+      "attrs": {
+        "id": "1",
+        "selection-relaxation-option": "selection-relaxation-allow",
+        "y-axis-name": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_actual_amt:qk]"
+      },
+      "mark_class": "Bar",
+      "clear_encodings": true
+    },
+    {
+      "attrs": {
+        "id": "3",
+        "selection-relaxation-option": "selection-relaxation-allow",
+        "y-axis-name": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:day_target_amt:qk]"
+      },
+      "mark_class": "Automatic",
+      "clear_encodings": true
+    }
+  ]
+}

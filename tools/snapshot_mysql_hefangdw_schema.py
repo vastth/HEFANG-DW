@@ -4,13 +4,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import pymysql
+from pymysql.cursors import DictCursor
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config import MYSQL_CONFIG
+from db_connections import connect_mysql
 
 
 def _resolve_path(path_str: str) -> Path:
@@ -25,9 +26,9 @@ def fetch_schema():
     if not schema_name:
         raise RuntimeError("MYSQL_CONFIG.database is empty")
 
-    conn = pymysql.connect(**MYSQL_CONFIG)
+    conn = connect_mysql()
     try:
-        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+        with conn.cursor(DictCursor) as cursor:
             cursor.execute(
                 """
                 SELECT TABLE_NAME, ENGINE, TABLE_COMMENT

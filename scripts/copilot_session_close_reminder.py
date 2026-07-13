@@ -21,12 +21,16 @@ def ensure_log_dir() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def sanitize_text(value: str) -> str:
+    return value.encode("utf-8", errors="replace").decode("utf-8")
+
+
 def write_hook_log(result: str, matched_rules: str, preview: str) -> None:
     entry = {
         "timestamp": datetime.now().strftime(TIMESTAMP_FORMAT),
-        "result": result,
-        "matchedRules": matched_rules,
-        "preview": preview,
+        "result": sanitize_text(result),
+        "matchedRules": sanitize_text(matched_rules),
+        "preview": sanitize_text(preview),
     }
     with STOP_LOG_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -57,15 +61,20 @@ def get_recent_matched_rules() -> list[str]:
         if entry.get("result") != "warning":
             continue
 
-        matched_rule = str(entry.get("matchedRule", "")).strip()
-        if not matched_rule:
+        raw_matched_rules = entry.get("matchedRules")
+        if isinstance(raw_matched_rules, list):
+            matched_rules = [str(rule).strip() for rule in raw_matched_rules if str(rule).strip()]
+        else:
+            matched_rule = str(entry.get("matchedRule", "")).strip()
+            matched_rules = [matched_rule] if matched_rule else []
+        if not matched_rules:
             continue
 
         timestamp = parse_timestamp(str(entry.get("timestamp", "")))
         if timestamp is None or timestamp < cutoff:
             continue
 
-        rules.append(matched_rule)
+        rules.extend(matched_rules)
 
     return rules
 
@@ -98,6 +107,12 @@ def save_reminder_state(signature: str) -> None:
 def build_action_hints(rules: list[str]) -> list[str]:
     hints: list[str] = []
 
+    if "db-write-risk" in rules:
+        hints.append("manual DB execution boundary and timeout risk")
+
+    if "context-governance" in rules:
+        hints.append("context pack and lesson index")
+
     if "copilot-customization" in rules:
         hints.append("runtime acceptance and meeting notes")
 
@@ -122,7 +137,7 @@ def build_action_hints(rules: list[str]) -> list[str]:
 def main() -> int:
     ensure_log_dir()
     raw_input = sys.stdin.read()
-    preview = raw_input.replace("\r", " ").replace("\n", " ")[:300]
+    preview = sanitize_text(raw_input.replace("\r", " ").replace("\n", " ")[:300])
 
     recent_rules = sorted(set(get_recent_matched_rules()))
     if not recent_rules:

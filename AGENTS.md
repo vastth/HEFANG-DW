@@ -2,11 +2,16 @@
 
 本文件是 HEFANG-DW 在 OpenCode Desktop / CLI 下的最小工作流入口。
 
+## 共享硬约束入口
+
+- 通用硬约束统一以 [.github/copilot-instructions.md](.github/copilot-instructions.md) 为唯一真值源，包括执行目标、证据要求、交接、数据库读写边界、超时治理、文档同步、业务口径、上下文压缩与安全约束。
+- 本文件只保留 OpenCode Desktop / CLI 的增量信息：事实源优先级、OpenCode 常用命令、MCP 现状、外部示例仓库约定与 Windows 使用习惯。
+- 若本文件与 [.github/copilot-instructions.md](.github/copilot-instructions.md) 对同一硬约束表述不一致，以 [.github/copilot-instructions.md](.github/copilot-instructions.md) 为准。
+
 ## 目标
 
-- 以 AI agent 为主完成脚本开发、审计、文档同步与交接
-- 不改业务口径时，优先做最小变更
-- 所有事实以代码、SQL、配置和现有文档为准，不臆造
+- 作为 OpenCode Desktop / CLI 的轻量入口，帮助快速定位事实源、常用命令、MCP 状态与 Windows 使用习惯。
+- 以 AI agent 为主协助脚本开发、审计、文档同步与交接；通用执行边界统一回到 [.github/copilot-instructions.md](.github/copilot-instructions.md)。
 
 ## 事实源优先级
 
@@ -14,20 +19,17 @@
 2. `docs/ARCHITECTURE.md`、`docs/RUNBOOK.md`、`docs/DATA_CONTRACTS.md`
 3. `README.md`
 
-## 工作原则
+## 工作原则（OpenCode 增量）
 
-- 复杂任务先规划，再修改
-- 不修改业务 SQL / ETL 核心逻辑，除非用户明确批准
-- 修改 ETL、SQL、表结构相关内容后，必须检查文档同步
-- 完成一组有意义的变更后，必须追加 `docs/AGENT_HANDOFF.md`
-- 每次排障后若形成可复用结论，或用户明确纠正业务逻辑/字段语义，必须写入 `docs/AGENT_LESSONS.md`
-- 所有密钥、连接串、Webhook 只允许通过环境变量提供
+- 在涉及需要构建新 DDL 等业务模块时，总是站在 CDO 首席数据官的视角思考。
+- 复杂任务优先使用 `/plan` 收敛目标、证据缺口和执行顺序；是否进入修改仍按 [.github/copilot-instructions.md](.github/copilot-instructions.md) 的通用硬约束执行。
+- 只读查询链路优先走 DBHub 只读账号 `dbhub_ro`；若 DBHub 结果与项目直连查询结果不一致，以 `hefang_dw` 项目直连查询为准，并在回复中说明差异来源。
+- OpenCode 日常开局可直接运行 `python scripts/agent_context_pack.py` 生成短上下文包；其余上下文压缩、防注入和大结果落盘规则按 [.github/copilot-instructions.md](.github/copilot-instructions.md) 的 `HC-CTX` 执行。
 
-## 环境现实约束
+## 环境补充
 
-- 当前公司开发环境中，用户是唯一负责数据库与数仓项目的人；不要默认存在内部 DBA、运维或其他数据库开发同事可协助。
-- Oracle 位于阿里云；MySQL 与 `hefang_dw` 运行在公司服务器虚拟机，且均由用户一手搭建。
-- 需要真实结构、样本或推送事实时，优先向用户索取其当前可直接导出的材料；若本地环境没有该对象，再建议向外部对接方索取。
+- Oracle 位于阿里云；MySQL 与 `hefang_dw` 运行在公司服务器虚拟机。
+- 需要真实结构、样本或推送事实时，优先使用用户当前可直接导出的材料；若本地环境没有该对象，再建议向外部对接方索取。
 - 若用户已明确当前 MySQL 未落任何 CRM 表，则后续不得再把本地 MySQL 当作 `shuyun_ods` 的实证来源。
 
 ## 常用 OpenCode 命令
