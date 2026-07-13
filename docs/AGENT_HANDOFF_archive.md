@@ -6,6 +6,42 @@
 
 ---
 
+### [2026-06-25 09:49] · GitHub Copilot · 修复门店日报同店同比分母截止规则
+
+**摘要**：门店日报在月中快闪合并时，同店去年同期分母改为截到合并前一天
+
+**变更文件**：
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `etl_ads_store_daily_report.py` | 修改 | 新增快闪合并截止作用域并截断 same_store_last_year_mtd_sales_amt |
+| `test_ads_store_daily_report.py` | 修改 | 新增月中快闪合并同比分母回归测试 |
+| `docs/DATA_CONTRACTS.md` | 修改 | 同步同店去年同期分母截止规则 |
+| `docs/ETL业务逻辑说明.md` | 修改 | 补充月中快闪合并的同比辅助口径说明 |
+| `CHANGELOG.md` | 修改 | 记录本轮修复与验证结果 |
+| `docs/AGENT_LESSONS.md` | 修改 | 沉淀月中快闪合并同比分母截断经验 |
+| `docs/AGENT_LESSONS_INDEX.md` | 修改 | 重建经验索引 |
+
+**Copilot 接棒须知**：
+- 当前仅完成 SQL 生成与文档同步验证，未执行真实写库重跑
+- 若用户人工重跑 2026-06-15 之后的 ads_store_daily_report，需要回查 SUBJ_BJGM 的 same_store_last_year_mtd_sales_amt 是否变为截至 2025-06-14
+
+**未完成项**：
+- [ ] 用户人工重跑受影响 report_date/data_version 的 ads_store_daily_report
+- [ ] 重开 销售部自动化日报.twb 验证 北京国贸店经营体 同比是否改为以 2025-06-14 为分母上界
+
+
+
+
+
+
+
+
+
+
+
+---
+
 ### [2026-06-22 17:54] · GitHub Copilot · 修复伯俊建模库存字段汉化与分组
 
 **摘要**：已为 伯俊Oracle数据建模.twb 补齐剩余库存事实字段中文 caption、metadata 别名与 3 组库存语义文件夹，并修复批量脚本对 datasource 改名和新分组补列不生效的问题。
