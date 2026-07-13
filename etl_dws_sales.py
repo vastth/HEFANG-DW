@@ -6,13 +6,13 @@
 """
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from datetime import datetime, timedelta
 import logging
 import sys
 import time
 
-from config import MYSQL_CONN_STR
+from db_connections import create_mysql_engine
 
 # 配置日志
 logging.basicConfig(
@@ -65,7 +65,7 @@ def extract_from_ods(start_date, end_date):
     """)
 
     logger.info("连接MySQL数据库，聚合 ODS 销售数据...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     logger.info(f"执行SQL查询（日期范围：{start_date} - {end_date}）...")
     try:
@@ -130,7 +130,7 @@ def load_to_mysql(df, start_date, end_date):
         return
     
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
     lock_name = 'hefang_dw:dws_sales_daily'
     max_attempts = 3
     

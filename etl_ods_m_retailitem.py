@@ -2,7 +2,7 @@
 """
 何方珠宝 - ODS零售单明细表ETL
 从Oracle M_RETAILITEM同步到MySQL ods_m_retailitem
-策略：全量覆盖
+策略：双水位增量，可切全量
 """
 
 import logging
@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from db_connections import create_mysql_engine, create_oracle_engine
+from etl_ods_incremental_utils import delete_existing_ids
 
 # 配置日志
 logging.basicConfig(
@@ -21,6 +21,12 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _coerce_as_of(as_of):
+    if as_of is None or isinstance(as_of, datetime):
+        return as_of
+    return datetime.fromisoformat(str(as_of))
 
 
 def _get_sync_state(engine, table_name):
@@ -110,13 +116,8 @@ def _get_settime_range(oracle_engine):
         return (row[0], row[1]) if row else (None, None)
 
 
-def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
-    """从Oracle抽取并写入MySQL（分批写入，避免内存峰值）"""
-
-    if window_days is None:
-        window_days = 7 if mode == "full" else 1
-
-    sql = """
+def _build_base_query():
+    return """
     SELECT
         ri.ID AS id,
         ri.M_RETAIL_ID AS m_retail_id,
@@ -132,21 +133,68 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
     FROM M_RETAILITEM ri
     """
 
+
+def _build_double_null_fallback_query():
+    return """
+    SELECT
+        ri.ID AS id,
+        ri.M_RETAIL_ID AS m_retail_id,
+        ri.M_PRODUCT_ID AS m_product_id,
+        ri.M_PRODUCTALIAS_ID AS m_productalias_id,
+        ri.QTY AS qty,
+        ri.PRICELIST AS pricelist,
+        ri.PRICEACTUAL AS priceactual,
+        ri.TOT_AMT_ACTUAL AS tot_amt_actual,
+        ri.TOT_AMT_LIST AS tot_amt_list,
+        ri.MODIFIEDDATE AS modifieddate,
+        ri.SETTIME AS settime,
+        r.MODIFIEDDATE AS retail_modifieddate
+    FROM M_RETAILITEM ri
+    JOIN M_RETAIL r ON r.ID = ri.M_RETAIL_ID
+    WHERE ri.MODIFIEDDATE IS NULL
+      AND ri.SETTIME IS NULL
+      AND r.MODIFIEDDATE >= :start_time
+      AND r.MODIFIEDDATE < :end_time
+    ORDER BY r.MODIFIEDDATE, ri.ID
+    """
+
+
+def _prepare_chunk(chunk, batch_id):
+    chunk.columns = [c.lower() for c in chunk.columns]
+    chunk['etl_batch_id'] = batch_id
+    chunk['etl_loaded_at'] = datetime.now()
+    return chunk
+
+
+def _update_chunk_max(current_max, chunk, column_name):
+    if column_name not in chunk.columns:
+        return current_max
+    value_series = pd.to_datetime(chunk[column_name], errors='coerce')
+    chunk_max = value_series.max()
+    if pd.notna(chunk_max):
+        if current_max is None or chunk_max > current_max:
+            return chunk_max
+    return current_max
+
+
+def extract_and_load(mode="incremental", backfill_days=7, window_days=None, as_of=None):
+    """从Oracle抽取并写入MySQL（分批写入，避免内存峰值）"""
+
+    as_of = _coerce_as_of(as_of)
+
+    if window_days is None:
+        window_days = 7 if mode == "full" else 1
+
+    sql = _build_base_query()
+    double_null_fallback_query = _build_double_null_fallback_query()
+
     batch_id = uuid4().hex
 
     logger.info("连接Oracle数据库...")
-    oracle_url = URL.create(
-        "oracle+oracledb",
-        username=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        host=ORACLE_CONFIG['host'],
-        port=ORACLE_CONFIG['port'],
-        database=ORACLE_CONFIG['service_name'],
-    )
-    oracle_engine = create_engine(oracle_url, pool_pre_ping=True, pool_recycle=1800)
+    oracle_engine = create_oracle_engine()
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     try:
         sync_state = _get_sync_state(engine, "ods_m_retailitem")
@@ -155,8 +203,10 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
         last_settime = settime_state["last_sync"] if settime_state else None
         if mode == "incremental" and last_sync:
             start_time = last_sync - timedelta(days=backfill_days)
-            end_time = datetime.now()
+            end_time = as_of or datetime.now()
             logger.info(f"增量模式：回刷起点 {start_time}")
+            if as_of:
+                logger.info(f"增量模式：固定截止时间 {end_time}")
         elif mode == "incremental":
             logger.info("增量模式：未找到水位，自动转为全量")
             mode = "full"
@@ -171,8 +221,10 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
         if mode == "incremental":
             if last_settime:
                 set_start_time = last_settime - timedelta(days=backfill_days)
-                set_end_time = datetime.now()
+                set_end_time = as_of or datetime.now()
                 logger.info(f"增量模式：SETTIME 回刷起点 {set_start_time}")
+                if as_of:
+                    logger.info(f"增量模式：SETTIME 固定截止时间 {set_end_time}")
             else:
                 min_set, max_set = _get_settime_range(oracle_engine)
                 if min_set and max_set:
@@ -227,9 +279,7 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
             # 先处理 modifieddate 为空的记录
             null_query = sql + " WHERE ri.MODIFIEDDATE IS NULL ORDER BY ri.ID"
             for chunk in pd.read_sql(null_query, oracle_engine, chunksize=50000):
-                chunk.columns = [c.lower() for c in chunk.columns]
-                chunk['etl_batch_id'] = batch_id
-                chunk['etl_loaded_at'] = datetime.now()
+                chunk = _prepare_chunk(chunk, batch_id)
                 chunk.to_sql(
                     name='ods_m_retailitem',
                     con=engine,
@@ -263,24 +313,35 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
                 )
                 params = {"start_time": window_start, "end_time": window_end}
                 for chunk in pd.read_sql(query, oracle_engine, chunksize=50000, params=params):
-                    chunk.columns = [c.lower() for c in chunk.columns]
-                    chunk['etl_batch_id'] = batch_id
-                    chunk['etl_loaded_at'] = datetime.now()
-                    if 'modifieddate' in chunk.columns:
-                        # Normalize to datetime; ignore NaT/NaN to avoid type compare errors
-                        md_series = pd.to_datetime(chunk['modifieddate'], errors='coerce')
-                        chunk_max = md_series.max()
-                        if pd.notna(chunk_max):
-                            if max_modified is None or chunk_max > max_modified:
-                                max_modified = chunk_max
-                    chunk.to_sql(
-                        name='ods_m_retailitem',
-                        con=engine,
-                        if_exists='append',
-                        index=False,
-                        chunksize=5000
-                    )
+                    chunk = _prepare_chunk(chunk, batch_id)
+                    max_modified = _update_chunk_max(max_modified, chunk, 'modifieddate')
+                    with engine.begin() as mysql_conn:
+                        delete_existing_ids(mysql_conn, 'ods_m_retailitem', chunk['id'].tolist())
+                        chunk.to_sql(
+                            name='ods_m_retailitem',
+                            con=mysql_conn,
+                            if_exists='append',
+                            index=False,
+                            chunksize=5000
+                        )
                     total_rows += len(chunk)
+                    logger.info(f"已写入 {total_rows} 条记录")
+
+                # 兜底抓取明细双空但头单 modifieddate 落在窗口内的记录，避免长期残留 unknown_nulls 差异。
+                for chunk in pd.read_sql(double_null_fallback_query, oracle_engine, chunksize=50000, params=params):
+                    chunk = _prepare_chunk(chunk, batch_id)
+                    max_modified = _update_chunk_max(max_modified, chunk, 'retail_modifieddate')
+                    write_chunk = chunk.drop(columns=['retail_modifieddate'], errors='ignore')
+                    with engine.begin() as mysql_conn:
+                        delete_existing_ids(mysql_conn, 'ods_m_retailitem', write_chunk['id'].tolist())
+                        write_chunk.to_sql(
+                            name='ods_m_retailitem',
+                            con=mysql_conn,
+                            if_exists='append',
+                            index=False,
+                            chunksize=5000
+                        )
+                    total_rows += len(write_chunk)
                     logger.info(f"已写入 {total_rows} 条记录")
 
                 next_start = window_end
@@ -310,22 +371,17 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
                 )
                 params = {"start_time": window_start, "end_time": window_end}
                 for chunk in pd.read_sql(query, oracle_engine, chunksize=50000, params=params):
-                    chunk.columns = [c.lower() for c in chunk.columns]
-                    chunk['etl_batch_id'] = batch_id
-                    chunk['etl_loaded_at'] = datetime.now()
-                    if 'settime' in chunk.columns:
-                        st_series = pd.to_datetime(chunk['settime'], errors='coerce')
-                        st_max = st_series.max()
-                        if pd.notna(st_max):
-                            if max_settime is None or st_max > max_settime:
-                                max_settime = st_max
-                    chunk.to_sql(
-                        name='ods_m_retailitem',
-                        con=engine,
-                        if_exists='append',
-                        index=False,
-                        chunksize=5000
-                    )
+                    chunk = _prepare_chunk(chunk, batch_id)
+                    max_settime = _update_chunk_max(max_settime, chunk, 'settime')
+                    with engine.begin() as mysql_conn:
+                        delete_existing_ids(mysql_conn, 'ods_m_retailitem', chunk['id'].tolist())
+                        chunk.to_sql(
+                            name='ods_m_retailitem',
+                            con=mysql_conn,
+                            if_exists='append',
+                            index=False,
+                            chunksize=5000
+                        )
                     total_rows += len(chunk)
                     settime_rows += len(chunk)
                     logger.info(f"已写入 {total_rows} 条记录")
@@ -352,7 +408,7 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
         engine.dispose()
 
 
-def run(mode="incremental", backfill_days=7, window_days=None):
+def run(mode="incremental", backfill_days=7, window_days=None, as_of=None):
     """执行ETL"""
     start_time = datetime.now()
     logger.info("=" * 50)
@@ -360,7 +416,12 @@ def run(mode="incremental", backfill_days=7, window_days=None):
     logger.info("=" * 50)
 
     try:
-        total_rows = extract_and_load(mode=mode, backfill_days=backfill_days, window_days=window_days)
+        total_rows = extract_and_load(
+            mode=mode,
+            backfill_days=backfill_days,
+            window_days=window_days,
+            as_of=as_of,
+        )
         end_time = datetime.now()
         duration = (end_time - start_time).seconds
 

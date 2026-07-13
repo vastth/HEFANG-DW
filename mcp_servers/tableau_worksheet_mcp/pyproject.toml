@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tableau-worksheet-mcp"
+version = "0.1.0"
+description = "Read-only Tableau workbook profiling MCP for multi-datasource worksheets"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.9.0",
+    "xmlschema>=3.4.5",
+]
+
+[project.scripts]
+tableau-worksheet-mcp = "tableau_worksheet_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tableau_worksheet_mcp"]

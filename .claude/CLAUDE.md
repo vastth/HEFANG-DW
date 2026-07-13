@@ -91,6 +91,13 @@ hefang_dw/                     ← 仓库根目录
 3. 当需要真实 `shuyun_ods` 结构、样本或推送事实时，先向用户索取其可直接导出的材料；若当前环境不存在该对象，再建议向数云方等外部对接方索取。
 4. 若用户已说明当前 MySQL 未落 CRM 表，则不得继续把本地 MySQL 当作 CRM 实证来源。
 
+## 3.2 数据库超时治理约束（硬约束）
+
+1. 凡新增或修改涉及数据库读写的 ETL、调度脚本、工具脚本或 SQL，必须先评估数据量、事务范围、锁持有时长与历史耗时，判断是否存在超时风险。
+2. 使用 [../db_connections.py](../db_connections.py#L47-L105) 时，必须显式选择匹配任务负载的 `timeout_profile`；若任务可能超过默认短超时，不得默认沿用 `default`。
+3. 在开发、自测、排障与接入任务计划前，必须至少完成一次超时测试或超时调试，并保留命令、日志、报错或耗时证据；未验证超时边界前，不得宣称链路“可稳定调度”。
+4. 若命中超时或失败清理异常，必须优先保留原始异常与 SQL/步骤上下文，再处理 `rollback()` / `close()` 等清理动作，避免清理逻辑覆盖首错。参考：[../etl_ads_sales_org_daily.py](../etl_ads_sales_org_daily.py#L747-L776)；[../etl_ads_sales_org_monthly.py](../etl_ads_sales_org_monthly.py#L610-L639)
+
 ---
 
 ## 4. 改动流程（Change Workflow）
@@ -101,10 +108,11 @@ hefang_dw/                     ← 仓库根目录
 1. 阅读目标模块（etl_*.py）与 config.py
 2. 对照 docs/数据结构与映射手册.md 确认源表/目标表字段
 3. 对照 docs/业务逻辑与指标规范.md 确认口径
-4. 确认 test_etl_automation.py 中已有的验收断言
-5. 修改代码
-6. 同步更新受影响的 docs/ 文档
-7. 在 CHANGELOG.md 新增条目
+4. 若涉及数据库读写，先评估 `timeout_profile`、锁/事务边界与超时验证方式
+5. 确认 test_etl_automation.py 中已有的验收断言
+6. 修改代码
+7. 同步更新受影响的 docs/ 文档
+8. 在 CHANGELOG.md 新增条目
 ```
 
 ### 4.2 修改数据库结构前

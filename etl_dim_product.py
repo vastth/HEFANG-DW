@@ -5,13 +5,14 @@
 策略：全量覆盖
 """
 
-import oracledb
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from datetime import datetime
 import logging
+from pathlib import Path
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR, MAIN_CATEGORY_IDS
+from config import MAIN_CATEGORY_IDS
+from db_connections import connect_oracle, create_mysql_engine
 
 # 配置日志
 logging.basicConfig(
@@ -19,6 +20,9 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+DIM_PRODUCT_ATTR_DDL_PATH = Path(__file__).resolve().parent / 'SQL' / 'create_dim_product_attr.sql'
 
 
 def extract_from_oracle():
@@ -66,11 +70,7 @@ def extract_from_oracle():
     """
 
     logger.info("连接Oracle数据库...")
-    conn = oracledb.connect(
-        user=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        dsn=ORACLE_DSN
-    )
+    conn = connect_oracle()
 
     logger.info("执行SQL查询...")
     cursor = conn.cursor()
@@ -118,7 +118,7 @@ def load_to_mysql(df):
     """加载到MySQL"""
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     # 全量覆盖：先清空再写入
     logger.info("清空目标表 dim_product...")
@@ -147,7 +147,7 @@ def load_to_mysql(df):
 def load_attr_to_mysql(df):
     """将颜色/尺寸写入 dim_product_attr 表，便于下游使用"""
     logger.info("开始写入 dim_product_attr...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     # color_attr/size_attr 来自 M_ATTRIBUTESETINSTANCE
     df_attr = df[['product_id', 'color_attr', 'size_attr']].drop_duplicates()
@@ -157,10 +157,16 @@ def load_attr_to_mysql(df):
 
     # 重命名列为通用字段名（color / size）写入目标表
     df_attr = df_attr.rename(columns={'color_attr': 'color', 'size_attr': 'size'})
+    ddl_sql = DIM_PRODUCT_ATTR_DDL_PATH.read_text(encoding='utf-8')
+    with engine.begin() as conn:
+        for statement in [item.strip() for item in ddl_sql.split(';') if item.strip()]:
+            conn.execute(text(statement))
+        conn.execute(text("TRUNCATE TABLE dim_product_attr"))
+
     df_attr.to_sql(
         name='dim_product_attr',
         con=engine,
-        if_exists='replace',
+        if_exists='append',
         index=False,
         chunksize=5000
     )

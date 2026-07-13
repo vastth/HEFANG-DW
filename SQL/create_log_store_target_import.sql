@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS log_store_target_import (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  file_name VARCHAR(255) NOT NULL COMMENT '源文件名',
+  file_path VARCHAR(500) NULL COMMENT '源文件路径',
+  file_md5 CHAR(32) NULL COMMENT '源文件MD5',
+  source_sheet VARCHAR(100) NOT NULL DEFAULT '导入模板' COMMENT '来源工作表',
+  target_month DATE NULL COMMENT '目标月份首日',
+  target_version VARCHAR(32) NULL COMMENT '目标版本号',
+  store_count INT NOT NULL DEFAULT 0 COMMENT '命中的门店数',
+  records_total INT NOT NULL DEFAULT 0 COMMENT '源门店行数',
+  records_after_filter INT NOT NULL DEFAULT 0 COMMENT '展开后的日粒度行数',
+  records_inserted INT NOT NULL DEFAULT 0 COMMENT '实际写入行数',
+  status VARCHAR(20) NOT NULL COMMENT '执行状态',
+  message VARCHAR(1000) NULL COMMENT '执行摘要或错误信息',
+  started_at DATETIME NULL COMMENT '开始时间',
+  finished_at DATETIME NULL COMMENT '结束时间',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  KEY idx_log_store_target_import_created_at (created_at),
+  KEY idx_log_store_target_import_status (status),
+  KEY idx_log_store_target_import_target_month (target_month)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='门店日报目标导入日志表';

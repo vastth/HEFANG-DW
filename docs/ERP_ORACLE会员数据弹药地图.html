@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ERP ORACLE 会员数据弹药地图｜HEFANG-DW</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --ink: #162033;
+      --muted: #667085;
+      --line: #e6e9f2;
+      --blue: #2868d8;
+      --blue-soft: #eaf1ff;
+      --green: #11845b;
+      --green-soft: #e8f7f1;
+      --orange: #b65700;
+      --orange-soft: #fff2df;
+      --purple: #6b3fc9;
+      --purple-soft: #f1ecff;
+      --red: #b42318;
+      --red-soft: #fff0ee;
+      --shadow: 0 18px 45px rgba(22, 32, 51, 0.08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(40, 104, 216, 0.14), transparent 30%),
+        radial-gradient(circle at 86% 0%, rgba(107, 63, 201, 0.12), transparent 28%),
+        var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    .page {
+      width: min(1320px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 34px 0 56px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #10213f 0%, #183c78 52%, #6b3fc9 100%);
+      color: #fff;
+      border-radius: 30px;
+      padding: 34px 38px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 440px;
+      height: 440px;
+      right: -160px;
+      top: -210px;
+      background: rgba(255, 255, 255, 0.13);
+      border-radius: 50%;
+    }
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 5vw, 52px);
+      letter-spacing: -0.04em;
+      line-height: 1.06;
+      max-width: 980px;
+      position: relative;
+      z-index: 1;
+    }
+    .hero p {
+      max-width: 960px;
+      margin: 0;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 17px;
+      position: relative;
+      z-index: 1;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+      position: relative;
+      z-index: 1;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.13);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      backdrop-filter: blur(8px);
+    }
+
+    .section {
+      margin-top: 24px;
+    }
+    .section-title {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 30px 0 14px;
+    }
+    .section-title h2 {
+      margin: 0;
+      font-size: 25px;
+      letter-spacing: -0.02em;
+    }
+    .section-title span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+    .kpi-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .domain-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .two-grid {
+      grid-template-columns: 1.2fr 0.8fr;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 10px 28px rgba(22, 32, 51, 0.05);
+      padding: 18px;
+    }
+    .kpi {
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi::after {
+      content: "";
+      position: absolute;
+      right: -38px;
+      bottom: -54px;
+      width: 130px;
+      height: 130px;
+      background: var(--blue-soft);
+      border-radius: 50%;
+    }
+    .kpi .label {
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 13px;
+      position: relative;
+      z-index: 1;
+    }
+    .kpi .value {
+      font-size: 33px;
+      font-weight: 850;
+      letter-spacing: -0.04em;
+      position: relative;
+      z-index: 1;
+    }
+    .kpi .note {
+      color: var(--muted);
+      font-size: 12px;
+      position: relative;
+      z-index: 1;
+    }
+    .green::after { background: var(--green-soft); }
+    .orange::after { background: var(--orange-soft); }
+    .purple::after { background: var(--purple-soft); }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .tag.blue { color: var(--blue); background: var(--blue-soft); }
+    .tag.green { color: var(--green); background: var(--green-soft); }
+    .tag.orange { color: var(--orange); background: var(--orange-soft); }
+    .tag.purple { color: var(--purple); background: var(--purple-soft); }
+    .tag.red { color: var(--red); background: var(--red-soft); }
+
+    .domain-card h3,
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+    .domain-card p,
+    .card p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .mini-list {
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+    .mini-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 10px;
+      border-radius: 13px;
+      background: #f8fafc;
+      color: #344054;
+      font-size: 13px;
+    }
+    .mini-list b { color: var(--ink); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 15px;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      padding: 11px 12px;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f6fb;
+      color: #344054;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: 0; }
+    td.num {
+      font-weight: 850;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: #eef2f7;
+      color: #243b63;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+    .node {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+      padding: 14px;
+      min-height: 150px;
+      position: relative;
+    }
+    .node::after {
+      content: "→";
+      position: absolute;
+      right: -15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #98a2b3;
+      font-size: 22px;
+      font-weight: 900;
+    }
+    .node:last-child::after { display: none; }
+    .node h4 { margin: 0 0 8px; font-size: 15px; }
+    .node p { margin: 0; color: var(--muted); font-size: 12px; }
+
+    .scenario-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .scenario {
+      border-radius: 20px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff, #fbfcff);
+      min-height: 185px;
+    }
+    .scenario h3 { margin: 9px 0 8px; font-size: 17px; }
+    .scenario p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .risk {
+      border-left: 5px solid var(--orange);
+      background: #fffaf2;
+    }
+    .ok {
+      border-left: 5px solid var(--green);
+      background: #f7fffb;
+    }
+    .warning-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #344054;
+    }
+    .warning-list li { margin: 8px 0; }
+
+    .footnote {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 1060px) {
+      .kpi-grid, .domain-grid, .scenario-grid, .two-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: 1fr; }
+      .node::after { display: none; }
+    }
+    @media (max-width: 680px) {
+      .page { width: min(100vw - 24px, 1320px); padding-top: 14px; }
+      .hero { padding: 26px 22px; border-radius: 22px; }
+      .kpi-grid, .domain-grid, .scenario-grid, .two-grid { grid-template-columns: 1fr; }
+      table { font-size: 12px; }
+      th, td { padding: 9px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>ERP ORACLE 会员数据弹药地图</h1>
+      <p>
+        面向“人”的商业分析，把 BOSNDS3 Oracle 源库中可用的会员主档、会员历史、积分账户、交易桥接、员工导购与平台扩展会员域整理成一张可执行的数据作战图。
+        本页只展示聚合与字段层证据，不展示手机号、姓名、地址等个人明细。
+      </p>
+      <div class="meta">
+        <span class="pill">数据源：Oracle / BOSNDS3</span>
+        <span class="pill">探测日期：2026-05-20</span>
+        <span class="pill">范围：ERP 会员相关表，不含 hfsy MySQL 明细</span>
+        <span class="pill">边界：只读探测，未落库改数</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>一眼结论</h2>
+        <span>适合直接向业务解释“现在手里有什么弹药”</span>
+      </div>
+      <div class="grid kpi-grid">
+        <article class="card kpi">
+          <div class="label">ERP 会员主档</div>
+          <div class="value">100.50 万</div>
+          <div class="note"><code>C_CLIENT_VIP</code> 与 <code>C_VIP</code> 当前同量级；可作为会员维表核心来源。</div>
+        </article>
+        <article class="card kpi green">
+          <div class="label">会员历史轨迹</div>
+          <div class="value">263.53 万</div>
+          <div class="note"><code>C_VIP_LOG</code> 覆盖 99.47 万会员，平均 2.65 条历史，可看会员资料变化。</div>
+        </article>
+        <article class="card kpi orange">
+          <div class="label">2026 年会员销售桥</div>
+          <div class="value">23.64%</div>
+          <div class="note"><code>M_RETAIL.C_VIP_ID</code> 单头覆盖率；出现的 3.64 万会员键全部能回连会员主档。</div>
+        </article>
+        <article class="card kpi purple">
+          <div class="label">Oracle 内平台会员扩展</div>
+          <div class="value">1181.61 万</div>
+          <div class="note"><code>SY_MEMBER</code> 存在 TAOBAO / YOUZAN / OFFLINE / JOS 平台域，适合后续单独桥接。</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>数据域地图</h2>
+        <span>先把会员相关对象分成“主弹药、桥接弹药、增益弹药、风险弹药”</span>
+      </div>
+      <div class="grid domain-grid">
+        <article class="card domain-card ok">
+          <span class="tag green">主弹药｜优先级 P0</span>
+          <h3>会员主档与等级</h3>
+          <p><code>C_CLIENT_VIP</code> / <code>C_VIP</code> / <code>C_VIPTYPE</code> 是 ERP 会员画像的第一核心。</p>
+          <ul class="mini-list">
+            <li><span>会员主档行数</span><b>1,004,958</b></li>
+            <li><span>等级档案</span><b>5 档</b></li>
+            <li><span>生日覆盖</span><b>92.17%</b></li>
+            <li><span>开卡门店字段覆盖</span><b>近 100%</b></li>
+          </ul>
+        </article>
+        <article class="card domain-card ok">
+          <span class="tag green">主弹药｜优先级 P0</span>
+          <h3>销售事实桥接</h3>
+          <p><code>M_RETAIL</code> 单头是会员销售分析主桥；<code>M_RETAILITEM</code> 明细适合补商品偏好。</p>
+          <ul class="mini-list">
+            <li><span>2026 年零售单头</span><b>197,323</b></li>
+            <li><span>带会员单据</span><b>46,656</b></li>
+            <li><span>会员键回连率</span><b>100%</b></li>
+            <li><span>明细商品覆盖</span><b>2,126 个商品</b></li>
+          </ul>
+        </article>
+        <article class="card domain-card ok">
+          <span class="tag green">主弹药｜优先级 P1</span>
+          <h3>积分与会员价值账户</h3>
+          <p><code>FA_VIPACC</code> 与 <code>FA_VIPINTEGRAL_FTP</code> 支撑积分余额、累计价值、最近消费、价值分层。</p>
+          <ul class="mini-list">
+            <li><span>会员账户行数</span><b>1,011,752</b></li>
+            <li><span>积分流水行数</span><b>1,117,976</b></li>
+            <li><span>积分覆盖会员</span><b>368,803</b></li>
+            <li><span>积分日期范围</span><b>20211208–20260520</b></li>
+          </ul>
+        </article>
+        <article class="card domain-card">
+          <span class="tag blue">增益弹药｜优先级 P1</span>
+          <h3>员工 / 导购 / 门店归属</h3>
+          <p><code>HR_EMPLOYEE</code> 可接销售员；<code>HR_EMPLOYEE_STORE</code> 支持员工门店关系；<code>YZ_SALESMAN</code> 是有赞导购候选。</p>
+          <ul class="mini-list">
+            <li><span>员工主档</span><b>1,223</b></li>
+            <li><span>员工门店关系</span><b>929</b></li>
+            <li><span>有赞销售员</span><b>338</b></li>
+            <li><span>销售员键回连</span><b>305 中 304</b></li>
+          </ul>
+        </article>
+        <article class="card domain-card">
+          <span class="tag purple">扩展弹药｜专题确认</span>
+          <h3>SY / YZ 平台会员域</h3>
+          <p>这些表位于 Oracle，但更像同步域 / 平台会员域；适合二期做全域会员融合，不建议一期混入主口径。</p>
+          <ul class="mini-list">
+            <li><span>SY_MEMBER</span><b>11,816,067</b></li>
+            <li><span>SY_VIP_BIND</span><b>8,409,107</b></li>
+            <li><span>YZ_VIP</span><b>1,532,483</b></li>
+            <li><span>SY 平台</span><b>TAOBAO / YOUZAN / OFFLINE / JOS</b></li>
+          </ul>
+        </article>
+        <article class="card domain-card risk">
+          <span class="tag orange">风险弹药｜先别误用</span>
+          <h3>弱字段与不可直接假设</h3>
+          <p>字段存在不等于可以直接做分析主键；一期需要规避手机号、明细会员键、SY_ID 直连等误用。</p>
+          <ul class="mini-list">
+            <li><span>会员手机号覆盖</span><b>10.06%</b></li>
+            <li><span>明细会员覆盖</span><b>0.19%</b></li>
+            <li><span>服务门店字段</span><b>未形成主链</b></li>
+            <li><span>SY 融合</span><b>需单独桥接确认</b></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>推荐的一期分析链路</h2>
+        <span>先把能闭环的链路跑起来，再做跨平台统一会员</span>
+      </div>
+      <div class="card">
+        <div class="flow">
+          <div class="node">
+            <span class="tag blue">会员主键</span>
+            <h4><code>C_CLIENT_VIP.ID</code></h4>
+            <p>作为 ERP 会员维表主键，补等级、生日、开卡门店、积分、OpenID 等画像字段。</p>
+          </div>
+          <div class="node">
+            <span class="tag green">交易桥</span>
+            <h4><code>M_RETAIL.C_VIP_ID</code></h4>
+            <p>作为会员销售主桥；2026 年以来覆盖 46,656 单，会员键可 100% 回连。</p>
+          </div>
+          <div class="node">
+            <span class="tag orange">商品明细</span>
+            <h4><code>M_RETAILITEM</code></h4>
+            <p>通过 <code>M_RETAIL_ID</code> 回到单头，再补商品 / SKU 偏好；不要用明细 <code>C_VIP_ID</code> 做主桥。</p>
+          </div>
+          <div class="node">
+            <span class="tag purple">门店 / 导购</span>
+            <h4><code>C_STORE</code> / <code>HR_EMPLOYEE</code></h4>
+            <p>门店归因走单头 <code>C_STORE_ID</code>；销售员归因走 <code>SALESREP_ID</code>，需过滤异常值 0。</p>
+          </div>
+          <div class="node">
+            <span class="tag green">会员运营</span>
+            <h4><code>FA_VIPACC</code> / <code>FA_VIPINTEGRAL_FTP</code></h4>
+            <p>叠加积分、累计消费、最近消费与价值分层，形成可经营的人群标签。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>核心表清单</h2>
+        <span>“能用来做什么”比单纯表名更重要</span>
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>表名</th>
+              <th>角色</th>
+              <th>规模 / 覆盖</th>
+              <th>关键字段</th>
+              <th>建议用法</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>C_CLIENT_VIP</code></td>
+              <td>ERP 会员主档候选</td>
+              <td class="num">1,004,958 行</td>
+              <td><code>ID</code>、<code>CARDNO</code>、<code>C_VIPTYPE_ID</code>、<code>BIRTHDAY</code>、<code>C_STORE_ID</code>、<code>HR_EMPLOYEE_ID</code>、<code>OPENID</code>、<code>YZ_OPEN_ID</code>、<code>SY_ID</code></td>
+              <td>一期会员维表主来源；敏感字段只做脱敏 / 哈希，不进入展示层。</td>
+            </tr>
+            <tr>
+              <td><code>C_VIP</code></td>
+              <td>ERP 会员主档镜像 / 候选</td>
+              <td class="num">1,004,958 行</td>
+              <td><code>ID</code>、<code>VIPNAME</code>、<code>PHONE</code>、<code>FIRSTSTORE</code>、<code>LASTSTORE</code>、<code>HR_EMPLOYEE_ID</code></td>
+              <td>和 <code>C_CLIENT_VIP</code> 做字段差异核对后确定唯一主表；当前不建议两个都落成业务主表。</td>
+            </tr>
+            <tr>
+              <td><code>C_VIPTYPE</code></td>
+              <td>会员等级维表</td>
+              <td class="num">5 档</td>
+              <td><code>ID</code>、<code>NAME</code>、<code>CODE</code>、<code>INTEGRALRATE</code>、<code>CANUPGRADE</code></td>
+              <td>补会员等级中文名、升级规则、积分倍率；可直接进入维表。</td>
+            </tr>
+            <tr>
+              <td><code>C_VIP_LOG</code></td>
+              <td>会员变更历史</td>
+              <td class="num">2,635,321 行</td>
+              <td><code>C_VIP_ID</code>、<code>MODIFIEDDATE</code>、<code>VIPSTATE</code>、<code>PHONE</code>、<code>HR_EMPLOYEE_ID</code></td>
+              <td>做会员资料变更、状态变迁、导购归属变动；不直接替代当前主档。</td>
+            </tr>
+            <tr>
+              <td><code>FA_VIPACC</code></td>
+              <td>会员账户 / 累计价值</td>
+              <td class="num">1,011,752 行</td>
+              <td><code>C_VIP_ID</code>、<code>TIMES</code>、<code>LASTDATE</code>、<code>AMOUNT</code>、<code>INTEGRAL</code>、<code>FIRSTDATE</code></td>
+              <td>做 RFM、累计消费、最近消费、会员价值分层。</td>
+            </tr>
+            <tr>
+              <td><code>FA_VIPINTEGRAL_FTP</code></td>
+              <td>积分变动流水</td>
+              <td class="num">1,117,976 行</td>
+              <td><code>C_VIP_ID</code>、<code>CHANGDATE</code>、<code>INTEGRAL</code>、<code>VIP_PAYAMT</code>、<code>C_STORE_ID</code></td>
+              <td>做积分活跃、积分获取 / 消耗、门店积分贡献；日期范围 20211208–20260520。</td>
+            </tr>
+            <tr>
+              <td><code>M_RETAIL</code></td>
+              <td>会员销售单头桥</td>
+              <td class="num">2026 年 197,323 单</td>
+              <td><code>ID</code>、<code>BILLDATE</code>、<code>C_STORE_ID</code>、<code>C_VIP_ID</code>、<code>SALESREP_ID</code>、<code>TOT_AMT_ACTUAL</code></td>
+              <td>会员销售贡献、复购、门店会员销售、导购销售主桥。</td>
+            </tr>
+            <tr>
+              <td><code>M_RETAILITEM</code></td>
+              <td>商品偏好明细</td>
+              <td class="num">2026 年 324,161 行</td>
+              <td><code>M_RETAIL_ID</code>、<code>M_PRODUCT_ID</code>、<code>M_PRODUCTALIAS_ID</code>、<code>TOT_AMT_ACTUAL</code>、<code>SALESREPS_NAME</code></td>
+              <td>通过单头回连会员后做商品偏好；明细 <code>C_VIP_ID</code> 覆盖仅 0.19%，不要做主键。</td>
+            </tr>
+            <tr>
+              <td><code>HR_EMPLOYEE</code> / <code>HR_EMPLOYEE_STORE</code></td>
+              <td>员工与门店归属</td>
+              <td class="num">1,223 / 929 行</td>
+              <td><code>ID</code>、<code>NAME</code>、<code>C_STORE_ID</code>、<code>ISSALER</code>、<code>YZ_OPEN_ID</code></td>
+              <td>补导购 / 销售员归因；销售数据里 305 个销售员键有 304 个能回连。</td>
+            </tr>
+            <tr>
+              <td><code>SY_MEMBER</code> / <code>SY_VIP_BIND</code></td>
+              <td>Oracle 内平台会员扩展域</td>
+              <td class="num">11,816,067 / 8,409,107 行</td>
+              <td><code>MEMBERID</code>、<code>PLATCODE</code>、<code>SHOPID</code>、<code>MOBILE</code>、<code>PLATACCOUNT</code></td>
+              <td>二期做全域会员融合；一期先不要把 SY 口径和 ERP 会员主档混作同一口径。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>会员等级结构</h2>
+        <span>先看 ERP 会员体系的可解释标签</span>
+      </div>
+      <div class="grid two-grid">
+        <div class="card">
+          <table>
+            <thead>
+              <tr><th>等级</th><th>会员数</th><th>占比判断</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>珍珠会员</td><td class="num">658,651</td><td>最大会员池，适合做基础活跃 / 召回。</td></tr>
+              <tr><td>黄金会员</td><td class="num">333,960</td><td>第二大会员池，适合做升级转化。</td></tr>
+              <tr><td>白金会员</td><td class="num">9,627</td><td>高价值会员候选。</td></tr>
+              <tr><td>钻石会员</td><td class="num">2,648</td><td>核心高价值人群。</td></tr>
+              <tr><td>黑钻会员</td><td class="num">72</td><td>极少数顶级会员，适合单独维护。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>等级分析可以马上做什么</h3>
+          <ul class="warning-list">
+            <li>按等级看销售贡献、客单价、复购率、最近消费时间。</li>
+            <li>珍珠 → 黄金、黄金 → 白金的升级漏斗。</li>
+            <li>高等级会员的门店集中度与商品偏好。</li>
+            <li>结合 <code>FA_VIPACC</code> 做“等级高但近期沉睡”名单。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>可立即启动的分析场景</h2>
+        <span>按当前证据，先做这些最稳</span>
+      </div>
+      <div class="grid scenario-grid">
+        <article class="scenario">
+          <span class="tag green">高确定性</span>
+          <h3>会员销售贡献</h3>
+          <p>用 <code>M_RETAIL.C_VIP_ID</code> 计算会员销售额、会员单数、会员销售占比、会员客单价，并按门店 / 月份 / 等级拆分。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag green">高确定性</span>
+          <h3>会员 RFM / 价值分层</h3>
+          <p>用 <code>FA_VIPACC</code> 的最近消费、累计金额、消费次数，形成高价值、潜力、沉睡、流失风险人群。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag green">高确定性</span>
+          <h3>会员等级运营</h3>
+          <p>用 <code>C_VIPTYPE</code> + 销售事实看等级贡献、升级空间和高等级会员维护重点。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag blue">中高确定性</span>
+          <h3>生日 / 周期营销</h3>
+          <p>生日字段覆盖 92.17%，可以做生日月会员池、生日月消费率和生日权益触达效果。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag blue">中高确定性</span>
+          <h3>门店会员资产</h3>
+          <p>用会员开卡门店、销售门店、积分门店，拆门店会员池、会员销售转化、门店沉睡会员。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag blue">中高确定性</span>
+          <h3>导购 / 员工销售归因</h3>
+          <p>销售单头 <code>SALESREP_ID</code> 2026 覆盖 22.89%，且大部分能回连员工主档，可做销售员会员销售贡献。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag orange">需谨慎</span>
+          <h3>商品偏好</h3>
+          <p>可以通过单头会员回连明细商品做偏好，但不能直接用明细 <code>C_VIP_ID</code>，因为覆盖只有 0.19%。</p>
+        </article>
+        <article class="scenario">
+          <span class="tag purple">二期专题</span>
+          <h3>全域会员融合</h3>
+          <p>Oracle 内有 SY / YZ 平台会员域，但需单独确认 <code>SY_ID</code>、手机号、OpenID、平台账号的桥接优先级。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>限制与注意事项</h2>
+        <span>这些点会直接影响建模方案</span>
+      </div>
+      <div class="grid two-grid">
+        <div class="card risk">
+          <h3>不要直接踩的坑</h3>
+          <ul class="warning-list">
+            <li><b>不要用手机号做唯一会员主键。</b>ERP 会员主档手机号覆盖只有 10.06%，且属于敏感字段。</li>
+            <li><b>不要用明细表 <code>C_VIP_ID</code> 做会员销售主链。</b>2026 年明细覆盖只有 0.19%，主链必须走单头 <code>M_RETAIL.C_VIP_ID</code>。</li>
+            <li><b>不要把 SY 域直接混入 ERP 会员主口径。</b>SY 表量级很大，语义更像平台同步域，应单独做桥接专题。</li>
+            <li><b>不要默认导购字段全可用。</b>ERP 销售员链路可用，但平台 / 有赞导购需要继续验证字段语义。</li>
+          </ul>
+        </div>
+        <div class="card ok">
+          <h3>一期建议落地口径</h3>
+          <ul class="warning-list">
+            <li>会员维表：优先 <code>C_CLIENT_VIP</code> + <code>C_VIPTYPE</code> + <code>FA_VIPACC</code>。</li>
+            <li>会员销售事实：优先 <code>M_RETAIL</code> 单头会员键 + <code>M_RETAILITEM</code> 商品明细。</li>
+            <li>员工归因：<code>M_RETAIL.SALESREP_ID</code> → <code>HR_EMPLOYEE.ID</code>，过滤 <code>0</code> 或异常员工键。</li>
+            <li>全域会员：作为二期，用 <code>SY_MEMBER</code> / <code>SY_VIP_BIND</code> 单独做桥接矩阵。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">
+        <h2>下一步行动路线</h2>
+        <span>从“看得懂”到“能落表”的建议顺序</span>
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>阶段</th>
+              <th>目标</th>
+              <th>产物</th>
+              <th>关键验证</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="tag green">M1</span></td>
+              <td>冻结 ERP 会员主档口径</td>
+              <td><code>dim_erp_member</code> 草案、字段脱敏规则、等级映射</td>
+              <td><code>C_CLIENT_VIP</code> 与 <code>C_VIP</code> 字段差异、主键唯一性、敏感字段处理。</td>
+            </tr>
+            <tr>
+              <td><span class="tag green">M2</span></td>
+              <td>打通会员销售事实</td>
+              <td><code>dwd_member_retail_sale</code> 或 DWD 销售宽视图</td>
+              <td>会员单头覆盖率、会员键回连率、退货 / 取消状态过滤。</td>
+            </tr>
+            <tr>
+              <td><span class="tag blue">M3</span></td>
+              <td>补价值与生命周期</td>
+              <td>会员 RFM、积分活跃、生日月、沉睡会员 ADS</td>
+              <td><code>FA_VIPACC</code> 日期字段语义、积分流水正负方向、历史快照边界。</td>
+            </tr>
+            <tr>
+              <td><span class="tag purple">M4</span></td>
+              <td>启动全域会员融合专题</td>
+              <td>ERP 会员 ↔ SY/YZ ↔ hfsy 的身份桥接矩阵</td>
+              <td><code>SY_ID</code>、OpenID、手机号、平台账号优先级与碰撞处理。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footnote">
+      证据来源：2026-05-20 只读查询 Oracle BOSNDS3；本页仅做汇总展示，不包含个人明细样本，不执行任何数据库写操作。
+    </p>
+  </main>
+</body>
+</html>

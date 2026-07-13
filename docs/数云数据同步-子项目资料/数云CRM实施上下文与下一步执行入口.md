@@ -68,7 +68,7 @@
 | 现有 ETL 模式为根目录平铺 `etl_*.py`，未使用 `etl/` 包结构 | 来源：[README.md](../../README.md#L100-L108) |
 | ODS 增量已使用独立水位表 `ods_sync_state`，说明 CRM 不宜复用该表 | 来源：[etl_ods_m_retail.py](../../etl_ods_m_retail.py#L20-L74)；[SQL/create_ods_tables.sql](../../SQL/create_ods_tables.sql#L46-L54) |
 | 当前自动化测试仅覆盖现有 DIM/DWS/ADS，尚无 CRM 用例 | 来源：[test_etl_automation.py](../../test_etl_automation.py#L1-L340) |
-| `docs/misc/数云实施-何方会员订单数据字典表 .xlsx` 展示的真实对象不是 12 张 `fdi_*` JSON 表，而是“会员批量信息表 / 单个会员绑定字段表 / 订单主表 / 订单明细表 / 省市区”五类字典，名称与字段更接近 `t_member_info`、`t_member_bind_info`、`t_trade`、`t_order`、`sys_area` | 来源：`docs/misc/数云实施-何方会员订单数据字典表 .xlsx` |
+| `docs/子项目资料/数云实施-何方会员订单数据字典表 .xlsx` 展示的真实对象不是 12 张 `fdi_*` JSON 表，而是“会员批量信息表 / 单个会员绑定字段表 / 订单主表 / 订单明细表 / 省市区”五类字典，名称与字段更接近 `t_member_info`、`t_member_bind_info`、`t_trade`、`t_order`、`sys_area` | 来源：`docs/子项目资料/数云实施-何方会员订单数据字典表 .xlsx` |
 | 2026-03-20 只读探查 `hfsy` 实库，已确认真实核心表为 `t_member_info`、`t_member_bind_info`、`t_trade`、`t_order`、`t_pin_xid_rel`、`sys_area`，并存在 `t_order_copy`、`t_order_copy1` 两张疑似备份表 | 实表证据：2026-03-20 `SHOW TABLES` |
 | 2026-03-20 已落盘 `reports/snapshot_mysql_hfsy_schema.json` 与 `docs/HFSY数据字典.md`，用于后续字段映射、DDL 设计与文档对齐 | 审计产物：`reports/snapshot_mysql_hfsy_schema.json`；`docs/HFSY数据字典.md` |
 | 2026-03-20 只读探查 `hfsy` 实库，已确认当前数云落库 MySQL 版本为 `5.7.42`，因此 MySQL 8.0 只能视为建议，不是当前接入硬前提 | 实表证据：2026-03-20 `SELECT VERSION()` |
@@ -165,7 +165,7 @@
 
 2026-03-20 已拿到两类新证据：
 
-- `docs/misc/数云实施-何方会员订单数据字典表 .xlsx`
+- `docs/子项目资料/数云实施-何方会员订单数据字典表 .xlsx`
 - `hfsy` 实库的只读 `SHOW TABLES` / `SHOW CREATE TABLE`
 
 基于这两类证据，可以确认以下事实：

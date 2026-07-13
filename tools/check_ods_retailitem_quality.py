@@ -10,30 +10,21 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config import ORACLE_CONFIG, MYSQL_CONN_STR
+from db_connections import create_mysql_engine, create_oracle_engine
 
 
 def _oracle_engine():
-    oracle_url = URL.create(
-        "oracle+oracledb",
-        username=ORACLE_CONFIG["user"],
-        password=ORACLE_CONFIG["password"],
-        host=ORACLE_CONFIG["host"],
-        port=ORACLE_CONFIG["port"],
-        database=ORACLE_CONFIG["service_name"],
-    )
-    return create_engine(oracle_url)
+    return create_oracle_engine()
 
 
 def _mysql_engine():
-    return create_engine(MYSQL_CONN_STR)
+    return create_mysql_engine()
 
 
 def _fetch_one(engine, sql, params):

@@ -10,9 +10,9 @@ import time
 from datetime import datetime
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
-from config import MYSQL_CONN_STR
+from db_connections import create_mysql_engine
 
 # 配置日志
 logging.basicConfig(
@@ -60,7 +60,7 @@ def extract_from_ods():
     """)
 
     logger.info("连接MySQL数据库，读取 ODS 库存数据...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     logger.info("执行SQL查询...")
     try:
@@ -141,7 +141,7 @@ def load_to_mysql(df):
         return
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     today = int(datetime.now().strftime('%Y%m%d'))
     lock_name = 'hefang_dw:dws_inventory_daily'

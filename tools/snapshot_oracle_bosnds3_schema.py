@@ -4,13 +4,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import oracledb
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config import ORACLE_CONFIG, ORACLE_DSN
+from db_connections import connect_oracle
 
 
 def _resolve_path(path_str: str) -> Path:
@@ -65,11 +63,7 @@ def fetch_schema(schema_name: str):
     doc_path = REPO_ROOT / "docs" / "数据结构与映射手册.md"
     table_filter = {name.upper() for name in load_oracle_table_list(doc_path)}
 
-    conn = oracledb.connect(
-        user=ORACLE_CONFIG["user"],
-        password=ORACLE_CONFIG["password"],
-        dsn=ORACLE_DSN,
-    )
+    conn = connect_oracle()
     try:
         cursor = conn.cursor()
         if table_filter:

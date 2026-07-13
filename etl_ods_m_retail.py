@@ -9,10 +9,10 @@ import logging
 from datetime import datetime, timedelta
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from db_connections import create_mysql_engine, create_oracle_engine
+from etl_ods_incremental_utils import delete_existing_ids
 
 # 配置日志
 logging.basicConfig(
@@ -20,6 +20,12 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _coerce_as_of(as_of):
+    if as_of is None or isinstance(as_of, datetime):
+        return as_of
+    return datetime.fromisoformat(str(as_of))
 
 
 def _get_sync_state(engine, table_name):
@@ -98,8 +104,10 @@ def _get_modified_range(oracle_engine):
         return (row[0], row[1]) if row else (None, None)
 
 
-def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
+def extract_and_load(mode="incremental", backfill_days=7, window_days=None, as_of=None):
     """从Oracle抽取并写入MySQL（分批写入，避免内存峰值）"""
+
+    as_of = _coerce_as_of(as_of)
 
     if window_days is None:
         window_days = 7 if mode == "full" else 1
@@ -110,6 +118,7 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
         r.DOCNO AS docno,
         r.BILLDATE AS billdate,
         r.C_STORE_ID AS c_store_id,
+        r.OMS_SOURCECODE AS oms_sourcecode,
         r.TOT_AMT_ACTUAL AS tot_amt_actual,
         r.TOT_AMT_LIST AS tot_amt_list,
         r.TOT_QTY AS tot_qty,
@@ -122,26 +131,20 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
     batch_id = int(datetime.now().strftime('%Y%m%d%H%M%S'))
 
     logger.info("连接Oracle数据库...")
-    oracle_url = URL.create(
-        "oracle+oracledb",
-        username=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        host=ORACLE_CONFIG['host'],
-        port=ORACLE_CONFIG['port'],
-        database=ORACLE_CONFIG['service_name'],
-    )
-    oracle_engine = create_engine(oracle_url, pool_pre_ping=True, pool_recycle=1800)
+    oracle_engine = create_oracle_engine()
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     try:
         sync_state = _get_sync_state(engine, "ods_m_retail")
         last_sync = sync_state["last_sync"] if sync_state else None
         if mode == "incremental" and last_sync:
             start_time = last_sync - timedelta(days=backfill_days)
-            end_time = datetime.now()
+            end_time = as_of or datetime.now()
             logger.info(f"增量模式：回刷起点 {start_time}")
+            if as_of:
+                logger.info(f"增量模式：固定截止时间 {end_time}")
         elif mode == "incremental":
             logger.info("增量模式：未找到水位，自动转为全量")
             mode = "full"
@@ -228,13 +231,15 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
                         if pd.notna(chunk_max):
                             if max_modified is None or chunk_max > max_modified:
                                 max_modified = chunk_max
-                    chunk.to_sql(
-                        name='ods_m_retail',
-                        con=engine,
-                        if_exists='append',
-                        index=False,
-                        chunksize=5000
-                    )
+                    with engine.begin() as mysql_conn:
+                        delete_existing_ids(mysql_conn, 'ods_m_retail', chunk['id'].tolist())
+                        chunk.to_sql(
+                            name='ods_m_retail',
+                            con=mysql_conn,
+                            if_exists='append',
+                            index=False,
+                            chunksize=5000
+                        )
                     total_rows += len(chunk)
                     logger.info(f"已写入 {total_rows} 条记录")
 
@@ -253,7 +258,7 @@ def extract_and_load(mode="incremental", backfill_days=7, window_days=None):
         engine.dispose()
 
 
-def run(mode="incremental", backfill_days=7, window_days=None):
+def run(mode="incremental", backfill_days=7, window_days=None, as_of=None):
     """执行ETL"""
     start_time = datetime.now()
     logger.info("=" * 50)
@@ -261,7 +266,12 @@ def run(mode="incremental", backfill_days=7, window_days=None):
     logger.info("=" * 50)
 
     try:
-        total_rows = extract_and_load(mode=mode, backfill_days=backfill_days, window_days=window_days)
+        total_rows = extract_and_load(
+            mode=mode,
+            backfill_days=backfill_days,
+            window_days=window_days,
+            as_of=as_of,
+        )
         end_time = datetime.now()
         duration = (end_time - start_time).seconds
 

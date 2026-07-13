@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
-from config import MYSQL_CONN_STR
+from db_connections import create_mysql_engine
 
 
 def _resolve_path(path_str: str | None, snapshot_date: int, suffix: str) -> Path:
@@ -46,7 +46,7 @@ def _get_snapshot_date(engine, snapshot_date: int | None) -> int:
 
 
 def export_ads(snapshot_date: int | None, output: str | None) -> Path:
-  engine = create_engine(MYSQL_CONN_STR)
+  engine = create_mysql_engine()
   target_snapshot = _get_snapshot_date(engine, snapshot_date)
 
   sql = text(

@@ -26,7 +26,8 @@ def test_oracle_connection():
         return False
     
     try:
-        from config import ORACLE_CONFIG, ORACLE_DSN
+        from config import ORACLE_DSN
+        from db_connections import connect_oracle
         print(f"[OK] 配置文件读取成功")
         print(f"  连接目标: {ORACLE_DSN}")
     except ImportError:
@@ -35,11 +36,7 @@ def test_oracle_connection():
     
     try:
         # 使用thin模式连接（无需Oracle客户端）
-        conn = oracledb.connect(
-            user=ORACLE_CONFIG['user'],
-            password=ORACLE_CONFIG['password'],
-            dsn=ORACLE_DSN
-        )
+        conn = connect_oracle()
         print("[OK] Oracle 连接成功!")
         
         # 测试查询
@@ -90,6 +87,7 @@ def test_mysql_connection():
     
     try:
         from config import MYSQL_CONFIG
+        from db_connections import connect_mysql
         print(f"[OK] 配置文件读取成功")
         print(f"  连接目标: {MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']}/{MYSQL_CONFIG['database']}")
     except ImportError:
@@ -97,7 +95,7 @@ def test_mysql_connection():
         return False
     
     try:
-        conn = pymysql.connect(**MYSQL_CONFIG)
+        conn = connect_mysql()
         print("[OK] MySQL 连接成功!")
         
         # 测试查询

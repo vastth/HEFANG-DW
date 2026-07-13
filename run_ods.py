@@ -14,6 +14,10 @@ import etl_ods_fa_storage
 import etl_ods_m_retail
 import etl_ods_m_retailitem
 
+
+def _format_as_of(as_of):
+    return as_of.strftime("%Y-%m-%d %H:%M:%S")
+
 def _setup_logger():
     logger = logging.getLogger(__name__)
     if logger.handlers:
@@ -78,8 +82,31 @@ def _run_quality_checks(logger, qc_days, qc_all, qc_start_date, qc_end_date, as_
             raise RuntimeError(f"{label} 执行失败，返回码 {result.returncode}")
 
 
+def _run_full_catchup(logger, full_catchup_days, window_days, catchup_as_of):
+    as_of_text = _format_as_of(catchup_as_of)
+    logger.info("开始执行 full 模式尾部补追: ods_m_retail / ods_m_retailitem")
+    logger.info(f"固定补追 as-of: {as_of_text}，回刷天数: {full_catchup_days}")
+
+    etl_ods_m_retail.run(
+        mode="incremental",
+        backfill_days=full_catchup_days,
+        window_days=window_days,
+        as_of=catchup_as_of,
+    )
+    etl_ods_m_retailitem.run(
+        mode="incremental",
+        backfill_days=full_catchup_days,
+        window_days=window_days,
+        as_of=catchup_as_of,
+    )
+
+    logger.info("full 模式尾部补追完成")
+    return as_of_text
+
+
 def run(mode="incremental", backfill_days=7, window_days=None, run_qc=True,
-        qc_days=7, qc_all=False, qc_start_date=None, qc_end_date=None):
+    qc_days=7, qc_all=False, qc_start_date=None, qc_end_date=None,
+    full_catchup_days=1):
     start_time = datetime.now()
     logger = _setup_logger()
     logger.info("=" * 50)
@@ -91,6 +118,11 @@ def run(mode="incremental", backfill_days=7, window_days=None, run_qc=True,
         etl_ods_m_retail.run(mode=mode, backfill_days=backfill_days, window_days=window_days)
         etl_ods_m_retailitem.run(mode=mode, backfill_days=backfill_days, window_days=window_days)
 
+        qc_as_of = None
+        if mode == "full" and full_catchup_days > 0:
+            catchup_as_of = datetime.now()
+            qc_as_of = _run_full_catchup(logger, full_catchup_days, window_days, catchup_as_of)
+
         end_time = datetime.now()
         duration = (end_time - start_time).seconds
         logger.info("=" * 50)
@@ -98,7 +130,7 @@ def run(mode="incremental", backfill_days=7, window_days=None, run_qc=True,
         logger.info("=" * 50)
 
         if run_qc:
-            as_of = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            as_of = qc_as_of or end_time.strftime("%Y-%m-%d %H:%M:%S")
             _run_quality_checks(logger, qc_days, qc_all, qc_start_date, qc_end_date, as_of=as_of)
         return True
 
@@ -117,6 +149,7 @@ if __name__ == '__main__':
     parser.add_argument("--qc-all", action="store_true", help="quality check on full dataset")
     parser.add_argument("--qc-start-date", type=int, default=None, help="qc start date YYYYMMDD")
     parser.add_argument("--qc-end-date", type=int, default=None, help="qc end date YYYYMMDD")
+    parser.add_argument("--full-catchup-days", type=int, default=1, help="days back for post-full incremental catch-up; 0 disables it")
     args = parser.parse_args()
 
     run(
@@ -128,4 +161,5 @@ if __name__ == '__main__':
         qc_all=args.qc_all,
         qc_start_date=args.qc_start_date,
         qc_end_date=args.qc_end_date,
+        full_catchup_days=args.full_catchup_days,
     )

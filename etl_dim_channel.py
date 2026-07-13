@@ -8,11 +8,10 @@
 import logging
 from datetime import datetime
 
-import oracledb
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from db_connections import connect_oracle, create_mysql_engine
 
 
 logging.basicConfig(
@@ -53,11 +52,7 @@ def extract_from_oracle():
     """
 
     logger.info("连接Oracle数据库...")
-    conn = oracledb.connect(
-        user=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        dsn=ORACLE_DSN
-    )
+    conn = connect_oracle()
 
     logger.info("执行SQL查询...")
     cursor = conn.cursor()
@@ -96,7 +91,7 @@ def load_to_mysql(df):
     """加载到MySQL"""
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     logger.info("清空目标表 dim_channel...")
     with engine.begin() as conn:

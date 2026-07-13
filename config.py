@@ -44,6 +44,25 @@ MYSQL_CONN_STR = (
 
 
 # ============================================
+# Ovopark / 万店掌开放平台配置
+# 凭据只允许通过环境变量注入；不要写入任何 git 跟踪文件。
+# ============================================
+OVOPARK_API_CONFIG = {
+    'base_url': os.getenv('OVOPARK_API_BASE_URL', 'https://cloudapi.ovopark.com/cloud.api'),
+    'app_id': os.getenv('OVOPARK_APP_ID', ''),
+    'access_key_id': os.getenv('OVOPARK_ACCESS_KEY_ID', ''),
+    'access_key_secret': os.getenv('OVOPARK_ACCESS_KEY_SECRET', ''),
+    'request_mode': os.getenv('OVOPARK_REQUEST_MODE', '1'),
+    'version': os.getenv('OVOPARK_API_VERSION', '1.0'),
+    'sign_method': os.getenv('OVOPARK_SIGN_METHOD', '1'),
+    'username': os.getenv('OVOPARK_USERNAME', ''),
+    'password': os.getenv('OVOPARK_PASSWORD', ''),
+    'authenticator': os.getenv('OVOPARK_AUTHENTICATOR', ''),
+    'request_timeout': int(os.getenv('OVOPARK_REQUEST_TIMEOUT', '30')),
+}
+
+
+# ============================================
 # 业务配置（不要修改，除非业务规则变了）
 # ============================================
 

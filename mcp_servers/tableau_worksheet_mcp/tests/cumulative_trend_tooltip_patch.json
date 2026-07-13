@@ -1,0 +1,302 @@
+{
+  "rows_text": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[Multiple Values]",
+  "cols_text": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[none:sales_date:qk]",
+  "dependency_fields": [
+    "销售日期",
+    "累计实际",
+    "累计目标",
+    "去年同期累计实际"
+  ],
+  "table_style_spec": {
+    "attrs": {},
+    "children": [
+      {
+        "tag": "style-rule",
+        "attrs": {
+          "element": "axis"
+        },
+        "text": "",
+        "children": [
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "title",
+              "class": "0",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[Multiple Values]",
+              "scope": "rows",
+              "value": "累计销售额（元）"
+            },
+            "text": "",
+            "children": []
+          },
+          {
+            "tag": "format",
+            "attrs": {
+              "attr": "width",
+              "field": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[Multiple Values]",
+              "value": "72"
+            },
+            "text": "",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "pane_specs": [
+    {
+      "attrs": {
+        "selection-relaxation-option": "selection-relaxation-allow"
+      },
+      "child_specs": [
+        {
+          "tag": "view",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "breakdown",
+              "attrs": {
+                "value": "auto"
+              },
+              "text": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "mark",
+          "attrs": {
+            "class": "Line"
+          },
+          "text": "",
+          "children": []
+        },
+        {
+          "tag": "encodings",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "color",
+              "attrs": {
+                "column": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[:Measure Names]"
+              },
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "tooltip",
+              "attrs": {
+                "column": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[attr:sales_date:ok]"
+              },
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "tooltip",
+              "attrs": {
+                "column": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:cum_actual_amt:qk]"
+              },
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "tooltip",
+              "attrs": {
+                "column": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:cum_target_amt:qk]"
+              },
+              "text": "",
+              "children": []
+            },
+            {
+              "tag": "tooltip",
+              "attrs": {
+                "column": "[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:last_year_cum_actual_amt:qk]"
+              },
+              "text": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "customized-tooltip",
+          "attrs": {
+            "show-buttons": "false"
+          },
+          "text": "",
+          "children": [
+            {
+              "tag": "formatted-text",
+              "attrs": {},
+              "text": "",
+              "children": [
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "fontcolor": "#787878"
+                  },
+                  "text": "销售日期:",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "bold": "true"
+                  },
+                  "text": "<[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[attr:sales_date:ok]>",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {},
+                  "text": "Æ",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "fontcolor": "#787878"
+                  },
+                  "text": "累计实际:",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "bold": "true"
+                  },
+                  "text": "<[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:cum_actual_amt:qk]>",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {},
+                  "text": "Æ",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "fontcolor": "#787878"
+                  },
+                  "text": "累计目标:",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "bold": "true"
+                  },
+                  "text": "<[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:cum_target_amt:qk]>",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {},
+                  "text": "Æ",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "fontcolor": "#787878"
+                  },
+                  "text": "去年同期累计:",
+                  "children": []
+                },
+                {
+                  "tag": "run",
+                  "attrs": {
+                    "bold": "true"
+                  },
+                  "text": "<[federated.1eddfye0w1v4zc1ffmccc01ghpvs].[sum:last_year_cum_actual_amt:qk]>",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "style",
+          "attrs": {},
+          "text": "",
+          "children": [
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "datalabel"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "font-size",
+                    "value": "8"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "font-weight",
+                    "value": "bold"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "tag": "style-rule",
+              "attrs": {
+                "element": "mark"
+              },
+              "text": "",
+              "children": [
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "size",
+                    "value": "0.45"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "color",
+                    "value": "#2f5d94"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-labels-show",
+                    "value": "true"
+                  },
+                  "text": "",
+                  "children": []
+                },
+                {
+                  "tag": "format",
+                  "attrs": {
+                    "attr": "mark-labels-cull",
+                    "value": "true"
+                  },
+                  "text": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

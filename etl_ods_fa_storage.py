@@ -10,10 +10,9 @@ from datetime import datetime
 from uuid import uuid4
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import URL
+from sqlalchemy import text
 
-from config import ORACLE_CONFIG, ORACLE_DSN, MYSQL_CONN_STR
+from db_connections import create_mysql_engine, create_oracle_engine
 
 # 配置日志
 logging.basicConfig(
@@ -42,18 +41,10 @@ def extract_and_load():
     batch_id = uuid4().hex
 
     logger.info("连接Oracle数据库...")
-    oracle_url = URL.create(
-        "oracle+oracledb",
-        username=ORACLE_CONFIG['user'],
-        password=ORACLE_CONFIG['password'],
-        host=ORACLE_CONFIG['host'],
-        port=ORACLE_CONFIG['port'],
-        database=ORACLE_CONFIG['service_name'],
-    )
-    oracle_engine = create_engine(oracle_url)
+    oracle_engine = create_oracle_engine()
 
     logger.info("连接MySQL数据库...")
-    engine = create_engine(MYSQL_CONN_STR)
+    engine = create_mysql_engine()
 
     try:
         logger.info("清空目标表 ods_fa_storage...")

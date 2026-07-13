@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS ods_m_retail (
     docno VARCHAR(40) NULL,
     billdate INT NULL,
     c_store_id BIGINT NULL,
+    oms_sourcecode VARCHAR(512) NULL,
     tot_amt_actual DECIMAL(18,2) NULL,
     tot_amt_list DECIMAL(18,2) NULL,
     tot_qty DECIMAL(18,4) NULL,
@@ -25,7 +26,9 @@ CREATE TABLE IF NOT EXISTS ods_m_retail (
     isactive CHAR(1) NULL,
     modifieddate DATETIME NULL,
     etl_batch_id BIGINT NOT NULL DEFAULT 0,
-    etl_loaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    etl_loaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ods_m_retail_id (id),
+    KEY idx_ods_m_retail_oms_sourcecode (oms_sourcecode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS ods_m_retailitem (
@@ -41,7 +44,8 @@ CREATE TABLE IF NOT EXISTS ods_m_retailitem (
     modifieddate DATETIME NULL,
     settime DATETIME NULL,
     etl_batch_id VARCHAR(32) NOT NULL,
-    etl_loaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    etl_loaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ods_m_retailitem_id (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS ods_sync_state (

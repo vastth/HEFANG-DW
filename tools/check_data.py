@@ -1,14 +1,14 @@
-import pymysql
-import os
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from db_connections import connect_mysql
 
 # 连接MySQL
-conn = pymysql.connect(
-    host=os.getenv('MYSQL_HOST', 'localhost'),
-    port=int(os.getenv('MYSQL_PORT', 3306)),
-    user=os.getenv('MYSQL_USER', 'dba'),
-    password=os.getenv('MYSQL_PASSWORD'),
-    database=os.getenv('MYSQL_DATABASE', 'hefang_dw')
-)
+conn = connect_mysql()
 
 cursor = conn.cursor()
 

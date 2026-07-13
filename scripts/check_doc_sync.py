@@ -6,19 +6,42 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT_DIR / "reports" / "docs_code_alignment.json"
-IGNORED_DOC_FILES = {
-    Path("docs") / "AGENT_HANDOFF.md",
-    Path("docs") / "AGENT_HANDOFF_archive.md",
+DOC_AUDIT_SCOPE = (
+    Path("README.md"),
+    Path("docs") / "ARCHITECTURE.md",
+    Path("docs") / "DATA_CONTRACTS.md",
+    Path("docs") / "RUNBOOK.md",
+    Path("docs") / "MYSQL数据字典.md",
+    Path("docs") / "数据结构与映射手册.md",
+    Path("docs") / "业务逻辑与指标规范.md",
+    Path("docs") / "数据仓库与ETL手册.md",
+    Path("docs") / "ETL业务逻辑说明.md",
+    Path("docs") / "SQL开发手册.md",
+)
+MARKDOWN_CODEBLOCK_IGNORED_FILES = {
+    Path("README.md"),
+    Path("docs") / "RUNBOOK.md",
 }
 
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
 TABLE_RE = re.compile(r"^(ods|dim|dwd|dws|ads)_[a-z0-9_]+$")
 FIELD_RE = re.compile(r".*_(id|qty|amount|date|time|code|name)$")
+TRAILING_UNDERSCORE_RE = re.compile(r".*_$")
+NUMBERED_PLACEHOLDER_RE = re.compile(r".*_\d+$")
+LINE_ANCHOR_RE = re.compile(r"l\d+$")
+YOUR_PLACEHOLDER_RE = re.compile(r"your_[a-z0-9_]+$")
+RAW_URL_RE = re.compile(r"https?://\S+")
+MARKDOWN_LINK_RE = re.compile(r"!?\[([^\]]*)\]\(([^)]+)\)")
 PLANNED_MARKERS = (
     "规划/未实现",
     "未在代码实现",
     "规划方案",
     "TODO(human)",
+    "规划态",
+    "规划态未实现",
+    "未实现",
+    "草案",
+    "设计稿",
 )
 NOT_FILLED_MARKER = "字段存在但当前ETL不填充"
 MYSQL_SNAPSHOT_PATH = ROOT_DIR / "reports" / "snapshot_mysql_hefangdw_schema.json"
@@ -149,6 +172,14 @@ def extract_terms(text: str, file_stems: set, excluded_terms=None):
             continue
         if _looks_like_file_token(term, file_stems):
             continue
+        if TRAILING_UNDERSCORE_RE.match(term):
+            continue
+        if NUMBERED_PLACEHOLDER_RE.match(term):
+            continue
+        if LINE_ANCHOR_RE.fullmatch(term):
+            continue
+        if YOUR_PLACEHOLDER_RE.fullmatch(term):
+            continue
         terms.add(term)
     return terms
 
@@ -189,6 +220,28 @@ def _collect_planned_terms_from_markdown(lines):
                     continue
                 planned_terms.add(term)
     return planned_terms
+
+
+def preprocess_markdown_content(path: Path, content: str) -> list[str]:
+    relative_path = path.relative_to(ROOT_DIR)
+    ignore_codeblocks = relative_path in MARKDOWN_CODEBLOCK_IGNORED_FILES
+    lines = []
+    in_codeblock = False
+
+    for raw_line in content.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            if ignore_codeblocks:
+                in_codeblock = not in_codeblock
+                continue
+        if ignore_codeblocks and in_codeblock:
+            continue
+
+        line = MARKDOWN_LINK_RE.sub(lambda match: match.group(1), raw_line)
+        line = RAW_URL_RE.sub(" ", line)
+        lines.append(line)
+
+    return lines
 
 
 def classify_risk(term: str) -> str:
@@ -249,12 +302,18 @@ def collect_terms(files, file_stems: set, per_file_excluded_terms=None):
 
         excluded_terms = per_file_excluded_terms.get(path.resolve(), set())
         if path.suffix.lower() == ".md" and "docs" in path.parts:
-            lines = content.splitlines()
+            lines = preprocess_markdown_content(path, content)
             planned_terms = _collect_planned_terms_from_markdown(lines)
             for line in lines:
                 for term in extract_terms(line, file_stems, excluded_terms=excluded_terms):
                     if term in planned_terms:
                         continue
+                    terms.add(term)
+                    sources.setdefault(term, set()).add(str(path.relative_to(ROOT_DIR)))
+        elif path.name.lower() == "readme.md":
+            lines = preprocess_markdown_content(path, content)
+            for line in lines:
+                for term in extract_terms(line, file_stems, excluded_terms=excluded_terms):
                     terms.add(term)
                     sources.setdefault(term, set()).add(str(path.relative_to(ROOT_DIR)))
         else:
@@ -314,12 +373,11 @@ def main():
     )
     args = parser.parse_args()
 
-    docs_files = [ROOT_DIR / "README.md"]
-    docs_files.extend(
-        path
-        for path in (ROOT_DIR / "docs").rglob("*.md")
-        if path.relative_to(ROOT_DIR) not in IGNORED_DOC_FILES
-    )
+    docs_files = [
+        ROOT_DIR / relative_path
+        for relative_path in DOC_AUDIT_SCOPE
+        if (ROOT_DIR / relative_path).exists()
+    ]
 
     code_exts = {".py", ".sql", ".bat", ".yml", ".yaml", ".ini", ".cfg", ".conf"}
     exclude_dirs = {
@@ -390,10 +448,10 @@ def main():
             "code_only": code_advisories,
         },
         "config": {
-            "docs_scope": ["README.md", "docs/**/*.md"],
+            "docs_scope": [str(path).replace("\\", "/") for path in DOC_AUDIT_SCOPE],
             "code_scope": sorted(code_exts),
             "exclude_dirs": sorted(exclude_dirs),
-            "ignored_doc_files": [str(path).replace("\\", "/") for path in sorted(IGNORED_DOC_FILES)],
+            "ignored_doc_files": [],
             "not_filled_marker": NOT_FILLED_MARKER,
             "mysql_snapshot_path": str(MYSQL_SNAPSHOT_PATH.relative_to(ROOT_DIR)),
             "audit_meta_terms_filtered": sorted(AUDIT_META_TERMS),
